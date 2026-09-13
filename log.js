@@ -3,6 +3,18 @@ const LOG = {
   sessions: [
     {
       date: '2026-09-13',
+      title: 'Session 4 — guided tours + transformer block',
+      points: [
+        'Added "Walk me through" tour mode: every scene now has an ordered box-by-box walkthrough with a card, ← → keys, dimming of everything except the current box.',
+        'Transformer block: x = x + Attn(LN(x)); x = x + MLP(LN(x)). LayerNorm formula and why (stable scale across 80 layers). Residual = shared bus, blocks only add.',
+        'Attention math end to end: Q K V projections, S = QKᵀ/√d (why √d: variance), causal mask (−∞ → 0, gives T training examples per pass), row softmax, A·V, concat heads (h·d_head = d_model), W_O. 4·d² params, T²·d compute.',
+        'MLP: act(x·W_up)·W_down, 4× expansion, nonlinearity is what stops the two matrices collapsing into one. 8·d² params, ~2/3 of the model. Key-value-memory picture.',
+        'Parameter calculator widget on the block scene: 12·d²·N + vocab·d reproduces GPT-2 small = 124M.',
+        'All Model / Block / Attention / MLP boxes marked discussed.',
+      ],
+    },
+    {
+      date: '2026-09-13',
       title: 'Session 3 — embedding and position',
       points: [
         'Correction: the tokenizer outputs an id only. The vector is made by the model: x = E[id] (≡ onehot · E), E is learned (vocab × d_model).',

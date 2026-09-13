@@ -164,6 +164,37 @@ WIDGETS.positional = function (el) {
   drawPE(); drawRope();
 };
 
+/* Parameter calculator: the 12·d²·N + vocab·d rule against real model sizes. */
+WIDGETS.params = function (el) {
+  const presets = {
+    'GPT-2 small': { d: 768, N: 12, V: 50257, T: 1024, tie: true },
+    'GPT-2 medium': { d: 1024, N: 24, V: 50257, T: 1024, tie: true },
+    'GPT-2 XL': { d: 1600, N: 48, V: 50257, T: 1024, tie: true },
+    'Llama-2 7B (approx)': { d: 4096, N: 32, V: 32000, T: 0, tie: false },
+  };
+  el.innerHTML = `<h3>Count the parameters</h3>
+    <p class="hint">Standard GPT-2 layout: attention 4·d², MLP 8·d² (hidden 4d), 2 LayerNorms. Llama uses SwiGLU (3 matrices, hidden ≈ 2.7d) and GQA, so it lands a bit off this formula — that's expected.</p>
+    <div class="row presets"></div>
+    <div class="row"><label>d_model <input class="d" type="number" value="768" style="width:70px"></label><label>N blocks <input class="N" type="number" value="12" style="width:55px"></label><label>vocab <input class="V" type="number" value="50257" style="width:75px"></label><label>T_max (learned pos, 0 = RoPE) <input class="T" type="number" value="1024" style="width:60px"></label><label><input class="tie" type="checkbox" checked> tie E and LM head</label></div>
+    <div class="hm out"></div>`;
+  const q = s => el.querySelector(s);
+  q('.presets').innerHTML = Object.keys(presets).map(k => `<button data-k="${k}">${k}</button>`).join('');
+  el.querySelectorAll('.presets button').forEach(b => b.onclick = () => { const p = presets[b.dataset.k]; q('.d').value = p.d; q('.N').value = p.N; q('.V').value = p.V; q('.T').value = p.T; q('.tie').checked = p.tie; draw(); });
+  const fmt = n => n >= 1e9 ? (n / 1e9).toFixed(2) + ' B' : n >= 1e6 ? (n / 1e6).toFixed(1) + ' M' : n >= 1e3 ? (n / 1e3).toFixed(1) + ' K' : String(n);
+  function draw() {
+    const d = +q('.d').value, N = +q('.N').value, V = +q('.V').value, T = +q('.T').value, tie = q('.tie').checked;
+    const attn = 4 * d * d, mlp = 8 * d * d, ln = 4 * d, block = attn + mlp + ln;
+    const emb = V * d, pos = T * d, head = tie ? 0 : V * d, fln = 2 * d;
+    const total = emb + pos + N * block + fln + head;
+    const rows = [['token embedding E', `vocab · d = ${V} · ${d}`, emb], ['position table P', T ? `T_max · d` : 'RoPE → 0', pos],
+      ['attention, per block', '4 · d²', attn], ['MLP, per block', '8 · d²', mlp], ['LayerNorms, per block', '4 · d', ln],
+      [`× ${N} blocks`, '', N * block], ['final LN', '2 · d', fln], ['LM head', tie ? 'tied with E → 0' : 'vocab · d', head], ['total', '', total]];
+    q('.out').innerHTML = '<table style="width:100%">' + rows.map(([a, b, c]) => `<tr${a === 'total' ? ' class="hl"' : ''}><th style="text-align:left">${a}</th><td style="width:auto;color:#8b94a7;text-align:left">${b}</td><td style="width:auto;text-align:right">${fmt(c)}</td></tr>`).join('') +
+      `<tr><th style="text-align:left">blocks share</th><td></td><td style="text-align:right">${(100 * N * block / total).toFixed(0)}%</td></tr><tr><th style="text-align:left">of which MLP</th><td></td><td style="text-align:right">${(100 * N * mlp / total).toFixed(0)}%</td></tr></table>`;
+  }
+  el.querySelectorAll('input').forEach(i => i.oninput = draw); draw();
+};
+
 /* Minimal byte-pair encoding, character-level (characters stand in for bytes). Shared by the two widgets. */
 const BPE = {
   DEFAULT_CORPUS: 'the cat sat on the mat. the cat ate the rat. low lower lowest. new newer newest. slow slower slowest. the newest cat is the slowest cat',

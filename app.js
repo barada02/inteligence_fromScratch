@@ -85,7 +85,7 @@ function nodeEl(n) {
   if (n.sub) { const s = el('text', { x: n.x + n.w / 2, y: cy + lines.length * 18 - 2, 'text-anchor': 'middle', 'dominant-baseline': 'middle', class: 'sub' }); s.textContent = n.sub; g.appendChild(s); }
   if (n.child) { const b = el('text', { x: n.x + n.w - 8, y: n.y + n.h - 7, 'text-anchor': 'end', class: 'badge' }); b.textContent = '⤵ open'; g.appendChild(b); }
   g.appendChild(el('circle', { cx: n.x + n.w - 10, cy: n.y + 10, r: 5, class: 'st st-' + (n.status || 'todo') }));
-  g.addEventListener('click', () => { if (!lastMoved) select(n); });
+  g.addEventListener('click', () => { if (lastMoved) return; if (tour) { const j = tour.steps.findIndex(st => st.node === n.id); if (j >= 0) { tour.i = j; showStep(); return; } } select(n); });
   g.addEventListener('dblclick', e => { e.preventDefault(); drill(n); });
   return g;
 }
@@ -121,7 +121,7 @@ function edgeEl(sc, e) {
 
 /* ---------- navigation ---------- */
 function load(mode, fromNode) {
-  render();
+  endTour(); render();
   const target = fitTo(bounds(cur()));
   if (mode === 'in') { view = scaleAboutCenter(target, 0.45); applyView(); animate(target, 420); }
   else if (mode === 'out' && fromNode) { view = fitTo(fromNode, 10); applyView(); animate(target, 420); }
@@ -156,20 +156,56 @@ function crumbs() {
   });
 }
 
+/* ---------- guided tour ---------- */
+let tour = null;                      // { steps, i } while a walkthrough is running
+const tourBox = $('#tour');
+function startTour() {
+  const sc = cur(); if (!sc.tour || !sc.tour.length) return;
+  tour = { steps: sc.tour, i: 0 }; world.classList.add('touring'); tourBox.hidden = false; showStep();
+}
+function endTour() {
+  if (!tour) return;
+  tour = null; world.classList.remove('touring'); tourBox.hidden = true; select(null);
+}
+function showStep() {
+  const sc = cur(), st = tour.steps[tour.i], n = st.node ? byId(sc, st.node) : null;
+  selected = n ? n.id : null;
+  world.querySelectorAll('.node').forEach(g => g.classList.toggle('sel', !!n && g.dataset.id === n.id));
+  if (n) { const m = 1.1; animate(fitTo({ x: n.x - n.w * m, y: n.y - n.h * 1.6, w: n.w * (1 + 2 * m), h: n.h * 4.2 }, 30), 450); }
+  else animate(fitTo(bounds(sc)), 450);
+  tourBox.querySelector('.tour-step').textContent = `step ${tour.i + 1} / ${tour.steps.length}`;
+  tourBox.querySelector('.tour-title').textContent = st.title || (n ? n.label.replace(/\n/g, ' ') : sc.title);
+  tourBox.querySelector('.tour-body').innerHTML = md(st.text);
+  tourBox.querySelector('.tour-prev').disabled = tour.i === 0;
+  tourBox.querySelector('.tour-next').textContent = tour.i === tour.steps.length - 1 ? 'finish ✓' : 'next →';
+  if (n) showNotes(n, true);
+}
+function tourStep(dir) {
+  if (!tour) return;
+  const j = tour.i + dir;
+  if (j >= tour.steps.length) { endTour(); return; }
+  if (j < 0) return;
+  tour.i = j; showStep();
+}
+tourBox.querySelector('.tour-prev').onclick = () => tourStep(-1);
+tourBox.querySelector('.tour-next').onclick = () => tourStep(1);
+tourBox.querySelector('.tour-end').onclick = endTour;
+
 /* ---------- side panel ---------- */
-function showNotes(n) {
+function showNotes(n, quiet) {
   const sc = cur(), t = n || sc, box = $('#tab-notes'); box.innerHTML = '';
   const head = document.createElement('div'); head.className = 'nhead';
   head.innerHTML = `<div class="kicker">${n ? 'box · ' + (n.kind || 'op') : 'scene'}</div><h1>${esc(n ? n.label.replace(/\n/g, ' ') : sc.title)}</h1>`;
   if (n) { const st = n.status || 'todo'; head.innerHTML += `<span class="pill ${st}">${st === 'done' ? 'discussed' : st === 'revisit' ? 'revisit' : 'not discussed yet'}</span>`; }
   if (n && n.sub) head.innerHTML += `<span class="pill">${esc(n.sub)}</span>`;
   box.appendChild(head);
+  if (!n && sc.tour && sc.tour.length) { const b = document.createElement('button'); b.className = 'tourbtn'; b.textContent = '▶ Walk me through (' + sc.tour.length + ' steps)'; b.onclick = startTour; box.appendChild(b); }
   if (n && n.child && SCENES[n.child]) { const b = document.createElement('button'); b.className = 'openbtn'; b.textContent = 'Open ' + SCENES[n.child].title + ' ▸'; b.onclick = () => drill(n); box.appendChild(b); }
   const body = document.createElement('div'); body.className = 'md';
   body.innerHTML = md(t.notes || '*Not discussed yet.* Ask me to open this one up and I will fill it in.');
   box.appendChild(body);
   if (t.widget && WIDGETS[t.widget]) { const w = document.createElement('div'); w.className = 'widget'; box.appendChild(w); WIDGETS[t.widget](w); }
-  activateTab('notes');
+  if (!quiet) activateTab('notes');
 }
 
 function renderMap() {
@@ -226,17 +262,24 @@ function md(src) {
 /* ---------- keys & buttons ---------- */
 window.addEventListener('keydown', e => {
   if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+  if (tour && (e.key === 'ArrowRight' || e.key === ' ')) { e.preventDefault(); tourStep(1); return; }
+  if (tour && e.key === 'ArrowLeft') { e.preventDefault(); tourStep(-1); return; }
+  if (tour && e.key === 'Escape') { e.preventDefault(); endTour(); return; }
   if (e.key === 'Escape' || e.key === 'Backspace') { e.preventDefault(); up(); }
   if (e.key === 'f' || e.key === 'F') animate(fitTo(bounds(cur())), 300);
 });
 $('#btn-up').onclick = up;
 $('#btn-fit').onclick = () => animate(fitTo(bounds(cur())), 300);
 
+let tourAt = null;
 (function initFromHash() {
-  const ids = location.hash.slice(1).split('/').filter(Boolean);
+  const [path0, query] = location.hash.slice(1).split('?');
+  const m = /tour=(\d+)/.exec(query || ''); if (m) tourAt = +m[1];
+  const ids = path0.split('/').filter(Boolean);
   const path = ['root'];
   for (const id of ids) { if (SCENES[id] && SCENES[path[path.length - 1]].nodes.some(n => n.child === id)) path.push(id); else break; }
   stack = path;
 })();
 load(null); renderLog();
+if (tourAt !== null && cur().tour) { startTour(); tour.i = Math.min(Math.max(0, tourAt - 1), tour.steps.length - 1); showStep(); }
 })();

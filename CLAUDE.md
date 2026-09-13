@@ -15,7 +15,8 @@ Open `index.html` directly in a browser (no server, no CDN — everything is loc
 - `status` on a box is the progress tracker: `todo` (default) → `done` once actually discussed → `revisit` if the user was unsure. Update it during/after each session.
 - After each session: append an entry to `log.js` and flip statuses in `scenes.js`.
 - Prefer a live widget over a static picture when a slider/toggle would build intuition.
-- Deep links: `index.html#model/block/attention` (scene ids joined by `/`).
+- Deep links: `index.html#model/block/attention` (scene ids joined by `/`); `?tour=3` after the path auto-starts the walkthrough at step 3.
+- Every scene should have a `tour: [{node, title?, text}]` — an ordered box-by-box walkthrough (node: null = whole-scene step). Keep each step 2–4 sentences; put the full math in the node's `notes`, which the panel shows alongside.
 
 ## Checks
 `node --check app.js` and validate scene data (every `child` and edge endpoint must exist). Headless screenshot:
