@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LLM from scratch — canvas</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div id="crumbs"></div>
+  <div class="hdr-right">
+    <span class="hint">drag = pan · wheel = zoom · click = notes · double-click = open · Esc = up</span>
+    <button id="btn-fit" title="Fit to screen (F)">fit</button>
+    <button id="btn-up" title="Go up one level (Esc)">↑ up</button>
+  </div>
+</header>
+<main>
+  <div id="stage">
+    <svg id="canvas">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#5a6478"/>
+        </marker>
+      </defs>
+      <g id="world"></g>
+    </svg>
+    <div id="legend">
+      <span><i class="sw weights"></i> learned weights</span>
+      <span><i class="sw tensor"></i> tensor / data</span>
+      <span><i class="sw op"></i> fixed operation</span>
+      <span><i class="sw concept"></i> concept / process</span>
+      <span><i class="dot done"></i> discussed <i class="dot revisit"></i> revisit <i class="dot todo"></i> not yet</span>
+    </div>
+  </div>
+  <aside id="panel">
+    <nav class="tabs">
+      <button data-tab="notes" class="on">Notes</button>
+      <button data-tab="map">Map</button>
+      <button data-tab="log">Log</button>
+    </nav>
+    <section id="tab-notes" class="tab on"></section>
+    <section id="tab-map" class="tab"></section>
+    <section id="tab-log" class="tab"></section>
+  </aside>
+</main>
+<script src="scenes.js"></script>
+<script src="log.js"></script>
+<script src="widgets.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

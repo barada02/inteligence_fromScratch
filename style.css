@@ -1,0 +1,89 @@
+:root{
+  --bg:#0f1115; --panel:#161a22; --line:#2a3140; --text:#e6e9ef; --muted:#8b94a7;
+  --tensor:#4c8dff; --weights:#ff9f43; --op:#3ddc97; --concept:#b48cff; --sel:#ffffff;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,"Segoe UI",Roboto,sans-serif}
+button{font:inherit}
+
+header{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+#crumbs{display:flex;align-items:center;gap:2px;overflow:hidden;white-space:nowrap}
+#crumbs button{background:none;border:0;color:var(--muted);cursor:pointer;padding:2px 4px;border-radius:4px}
+#crumbs button:hover{color:var(--text);background:#20263a}
+#crumbs button:last-child{color:var(--text);font-weight:600}
+#crumbs span{color:#3f475a;margin:0 2px}
+.hdr-right{display:flex;align-items:center;gap:8px}
+.hdr-right .hint{color:var(--muted);font-size:12px;margin-right:8px}
+.hdr-right button{background:#20263a;border:1px solid var(--line);color:var(--text);padding:4px 10px;border-radius:6px;cursor:pointer}
+.hdr-right button:hover{background:#2a3350}
+
+main{display:flex;height:calc(100% - 44px)}
+#stage{flex:1;min-width:0;position:relative}
+#canvas{width:100%;height:100%;display:block;cursor:grab;user-select:none}
+#canvas:active{cursor:grabbing}
+#legend{position:absolute;left:12px;bottom:10px;display:flex;gap:16px;font-size:12px;color:var(--muted);background:rgba(15,17,21,.7);padding:6px 10px;border-radius:6px;pointer-events:none}
+#legend .sw{display:inline-block;width:14px;height:10px;border:2px solid;border-radius:3px;vertical-align:-1px;margin-right:4px}
+#legend .sw.weights{border-color:var(--weights)} #legend .sw.tensor{border-color:var(--tensor)}
+#legend .sw.op{border-color:var(--op)} #legend .sw.concept{border-color:var(--concept)}
+#legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 4px 0 6px;vertical-align:-1px}
+.dot.todo,.st-todo{background:#3a4152;fill:#3a4152} .dot.done,.st-done{background:var(--op);fill:var(--op)} .dot.revisit,.st-revisit{background:var(--weights);fill:var(--weights)}
+
+/* ---- svg nodes ---- */
+.node rect{fill:#1b2130;stroke:var(--op);stroke-width:2;cursor:pointer;transition:fill .12s}
+.node.kind-tensor rect{stroke:var(--tensor)}
+.node.kind-weights rect{stroke:var(--weights);stroke-width:3}
+.node.kind-concept rect{stroke:var(--concept)}
+.node.kind-group rect{fill:rgba(255,255,255,.015);stroke:var(--line);stroke-dasharray:6 5;pointer-events:none}
+.node:hover rect{fill:#232b3d}
+.node.sel rect{stroke:var(--sel)}
+.node text{fill:var(--text);font-size:15px;pointer-events:none}
+.node.kind-group text{fill:var(--muted);font-size:13px}
+.node .sub{font-size:11px;fill:var(--muted)}
+.node .badge{font-size:11px;fill:var(--muted)}
+.edge path{fill:none;stroke:#5a6478;stroke-width:2}
+.edge.skip path{stroke-dasharray:5 4}
+.edge .elbl{fill:var(--muted);font-size:12px}
+
+/* ---- panel ---- */
+#panel{width:400px;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;background:none;border:0;color:var(--muted);padding:10px;cursor:pointer}
+.tabs button.on{color:var(--text);box-shadow:inset 0 -2px 0 var(--tensor)}
+.tab{display:none;overflow:auto;padding:16px 18px;flex:1}
+.tab.on{display:block}
+.kicker{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.nhead h1{font-size:20px;margin:2px 0 8px}
+.pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;background:#20263a;color:var(--muted);margin-right:6px}
+.pill.done{color:var(--op)} .pill.revisit{color:var(--weights)}
+.openbtn{display:inline-block;margin:6px 0 12px;background:#20263a;border:1px solid var(--line);color:var(--text);padding:5px 12px;border-radius:6px;cursor:pointer}
+.openbtn:hover{background:#2a3350}
+
+.md h2{font-size:17px;margin:18px 0 6px} .md h3{font-size:15px;margin:16px 0 4px;color:var(--muted)}
+.md p{margin:8px 0} .md ul,.md ol{padding-left:20px;margin:6px 0} .md li{margin:3px 0}
+.md code{background:#20263a;padding:1px 5px;border-radius:4px;font-size:13px;font-family:Consolas,monospace}
+.md pre{background:#0b0d12;border:1px solid var(--line);padding:10px;border-radius:6px;overflow:auto;font-size:13px;font-family:Consolas,monospace}
+.md pre code{background:none;padding:0}
+.md b{color:#fff}
+
+.widget{margin-top:18px;padding:14px;border:1px solid var(--line);border-radius:8px;background:#11141b}
+.widget h3{margin:0 0 6px;font-size:15px}
+.widget .hint{color:var(--muted);font-size:12px;margin:4px 0 10px}
+.widget input[type=range]{width:100%}
+.widget label{font-size:13px}
+.bar{display:grid;grid-template-columns:90px 1fr 52px;align-items:center;gap:8px;margin:4px 0;font-size:13px}
+.bar .bt small{color:var(--muted)} .bar .bf{height:12px;background:#20263a;border-radius:3px;overflow:hidden}
+.bar .bf div{height:100%;background:var(--tensor);transition:width .1s} .bar .bp{text-align:right;color:var(--muted)}
+.hm-wrap{display:flex;flex-direction:column;gap:12px;margin-top:8px}
+.hm-title{font-size:12px;color:var(--muted);margin-bottom:4px}
+.hm table{border-collapse:collapse;font-size:11px;font-family:Consolas,monospace}
+.hm th{color:var(--muted);font-weight:normal;padding:2px 4px}
+.hm td{width:46px;height:24px;text-align:center;border:1px solid #0f1115;color:#fff}
+
+#tab-map ul{list-style:none;padding-left:14px;margin:4px 0}
+#tab-map>ul{padding-left:0}
+#tab-map button{background:none;border:0;color:var(--muted);cursor:pointer;padding:3px 6px;border-radius:4px;text-align:left}
+#tab-map button:hover{color:var(--text);background:#20263a}
+#tab-map button.here{color:var(--text);font-weight:600;background:#20263a}
+.progress{margin-bottom:12px;color:var(--muted);font-size:13px} .progress b{color:var(--text)}
+.sess{margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.sess h3{margin:2px 0 6px;font-size:15px} .sess ul{padding-left:18px;margin:0} .sess li{margin:3px 0}
