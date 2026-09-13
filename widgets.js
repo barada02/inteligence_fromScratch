@@ -96,6 +96,74 @@ const WIDGETS = {
   },
 };
 
+/* Embedding lookup + what training does to the table. Toy vocab of 8, d_model = 4. */
+WIDGETS.embedding = function (el) {
+  const toks = ['the', 'a', 'cat', 'dog', 'kitten', 'car', 'truck', 'sat'], d = 4;
+  let seed = 3; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return +(seed / 0x7fffffff * 2 - 1).toFixed(2); };
+  const random = toks.map(() => Array.from({ length: d }, rnd));
+  const trained = [[0.9, 0.1, 0.0, 0.1], [0.8, 0.2, 0.1, 0.0], [0.1, 0.9, 0.3, 0.1], [0.1, 0.8, 0.4, 0.1],
+                   [0.2, 0.9, 0.2, 0.3], [0.0, 0.1, 0.9, 0.4], [0.1, 0.0, 0.8, 0.5], [0.3, 0.2, 0.1, 0.9]];
+  let E = random, sel = 2;
+  const cos = (a, b) => { const dot = a.reduce((s, v, i) => s + v * b[i], 0), na = Math.hypot(...a), nb = Math.hypot(...b); return dot / (na * nb); };
+  el.innerHTML = `<h3>x = onehot(id) · E</h3>
+    <p class="hint">vocab = 8, d_model = 4. Click a token to look it up. Then switch the table to the (toy) trained state and look at the similarity grid.</p>
+    <div class="row"><label><input type="radio" name="emb" value="r" checked> random init</label><label><input type="radio" name="emb" value="t"> after training (toy)</label></div>
+    <div class="toks"></div>
+    <div class="hm-title">E — highlighted row is the one the lookup returns</div><div class="hm E"></div>
+    <div class="last eq"></div>
+    <div class="hm-title">cosine similarity between rows of E</div><div class="hm sim"></div>`;
+  const q = s => el.querySelector(s);
+  q('.toks').innerHTML = toks.map((t, i) => `<button class="tk" data-i="${i}">${i}: ${t}</button>`).join('');
+  el.querySelectorAll('.tk').forEach(b => b.onclick = () => { sel = +b.dataset.i; draw(); });
+  el.querySelectorAll('input[name=emb]').forEach(r => r.onchange = () => { E = r.value === 'r' ? random : trained; draw(); });
+  function draw() {
+    el.querySelectorAll('.tk').forEach(b => b.classList.toggle('on', +b.dataset.i === sel));
+    q('.hm.E').innerHTML = '<table><tr><th></th>' + Array.from({ length: d }, (_, j) => `<th>d${j}</th>`).join('') + '</tr>' +
+      E.map((row, i) => `<tr class="${i === sel ? 'hl' : ''}"><th>${i} ${toks[i]}</th>` + row.map(v => `<td style="background:${v > 0 ? `rgba(76,141,255,${Math.abs(v)})` : `rgba(255,159,67,${Math.abs(v)})`}">${v.toFixed(2)}</td>`).join('') + '</tr>').join('') + '</table>';
+    const oh = toks.map((_, i) => i === sel ? 1 : 0);
+    q('.eq').innerHTML = `onehot(${sel}) = [${oh.join(', ')}]<br>x = onehot · E = <b>[${E[sel].map(v => v.toFixed(2)).join(', ')}]</b> &nbsp;<small>= row ${sel}</small>`;
+    q('.hm.sim').innerHTML = '<table><tr><th></th>' + toks.map(t => `<th>${t}</th>`).join('') + '</tr>' +
+      E.map((a, i) => `<tr><th>${toks[i]}</th>` + E.map(b => { const c = cos(a, b); return `<td style="background:rgba(61,220,151,${Math.max(0, c)})">${c.toFixed(2)}</td>`; }).join('') + '</tr>').join('') + '</table>';
+  }
+  draw();
+};
+
+/* Sinusoidal table heatmap + RoPE relative-position demo. */
+WIDGETS.positional = function (el) {
+  const T = 24, d = 16;
+  const PE = Array.from({ length: T }, (_, t) => Array.from({ length: d }, (_, j) => { const f = Math.pow(10000, -Math.floor(j / 2) * 2 / d); return j % 2 ? Math.cos(t * f) : Math.sin(t * f); }));
+  el.innerHTML = `<h3>Sinusoidal PE[t, j]</h3>
+    <p class="hint">Rows = position t, columns = dimension j. Each column pair is a sin/cos "clock hand" at its own frequency: j=0,1 spin fastest, j=14,15 slowest.</p>
+    <label>t = <span class="tv">0</span></label><input class="tsl" type="range" min="0" max="${T - 1}" value="0">
+    <div class="hm pe"></div>
+    <h3 style="margin-top:18px">RoPE on one 2-D pair</h3>
+    <p class="hint">q at position m and k at position n are each rotated by their position × θ. Their dot product depends only on m − n. Shift both together and nothing changes.</p>
+    <div class="row"><label>m = <span class="mv">3</span></label><input class="msl" type="range" min="0" max="20" value="3"><label>n = <span class="nv">1</span></label><input class="nsl" type="range" min="0" max="20" value="1"><button class="shift">shift both +1</button></div>
+    <svg class="rope" viewBox="0 0 320 170" width="100%" style="max-width:320px;display:block"></svg>
+    <div class="last ropeeq"></div>`;
+  const q = s => el.querySelector(s);
+  const tsl = q('.tsl'), msl = q('.msl'), nsl = q('.nsl');
+  function drawPE() {
+    const t = +tsl.value; q('.tv').textContent = t;
+    q('.hm.pe').innerHTML = '<table>' + PE.map((row, i) => `<tr class="${i === t ? 'hl' : ''}"><th>${i}</th>` + row.map(v => `<td style="width:18px;background:${v > 0 ? `rgba(76,141,255,${v})` : `rgba(255,159,67,${-v})`}"></td>`).join('') + '</tr>').join('') + '</table>';
+  }
+  const theta = 0.35, q0 = [1.0, 0.3], k0 = [0.8, 0.6];
+  const rot = (v, a) => [v[0] * Math.cos(a) - v[1] * Math.sin(a), v[0] * Math.sin(a) + v[1] * Math.cos(a)];
+  function drawRope() {
+    const m = +msl.value, n = +nsl.value; q('.mv').textContent = m; q('.nv').textContent = n;
+    const qm = rot(q0, m * theta), kn = rot(k0, n * theta);
+    const dot = qm[0] * kn[0] + qm[1] * kn[1];
+    const cx = 160, cy = 85, S = 60;
+    const arrow = (v, col, lab) => `<line x1="${cx}" y1="${cy}" x2="${cx + v[0] * S}" y2="${cy - v[1] * S}" stroke="${col}" stroke-width="3" stroke-linecap="round"/><text x="${cx + v[0] * S * 1.18}" y="${cy - v[1] * S * 1.18}" fill="${col}" font-size="12" text-anchor="middle">${lab}</text>`;
+    q('.rope').innerHTML = `<circle cx="${cx}" cy="${cy}" r="${S}" fill="none" stroke="#2a3140"/><line x1="${cx - 80}" y1="${cy}" x2="${cx + 80}" y2="${cy}" stroke="#2a3140"/><line x1="${cx}" y1="${cy - 80}" x2="${cx}" y2="${cy + 80}" stroke="#2a3140"/>` +
+      arrow(q0, '#3a4152', 'q') + arrow(k0, '#3a4152', 'k') + arrow(qm, '#4c8dff', `q·R(${m}θ)`) + arrow(kn, '#ff9f43', `k·R(${n}θ)`);
+    q('.ropeeq').innerHTML = `angle between them = (m − n)·θ = <b>${m - n}θ</b> &nbsp;→&nbsp; q'·k' = <b>${dot.toFixed(3)}</b>`;
+  }
+  tsl.oninput = drawPE; msl.oninput = drawRope; nsl.oninput = drawRope;
+  q('.shift').onclick = () => { if (+msl.value < 20 && +nsl.value < 20) { msl.value = +msl.value + 1; nsl.value = +nsl.value + 1; drawRope(); } };
+  drawPE(); drawRope();
+};
+
 /* Minimal byte-pair encoding, character-level (characters stand in for bytes). Shared by the two widgets. */
 const BPE = {
   DEFAULT_CORPUS: 'the cat sat on the mat. the cat ate the rat. low lower lowest. new newer newest. slow slower slowest. the newest cat is the slowest cat',

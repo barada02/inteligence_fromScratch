@@ -59,10 +59,12 @@ Double-click any box marked ⤵ to zoom inside it.
 model: {
   title: 'Model',
   nodes: [
-    { id: 'ids',   label: 'Token IDs',                   x: 0,    y: 200, w: 150, h: 70, kind: 'tensor',  sub: '(T)' },
-    { id: 'emb',   label: 'Token embedding',             x: 210,  y: 200, w: 180, h: 70, kind: 'weights', sub: 'lookup: vocab × d_model' },
-    { id: 'pos',   label: 'Positional info',             x: 210,  y: 330, w: 180, h: 70, kind: 'weights', sub: 'learned, or RoPE inside attention' },
-    { id: 'add',   label: '+',                           x: 440,  y: 210, w: 50,  h: 50, kind: 'op' },
+    { id: 'ids',   label: 'Token IDs',                   x: 0,    y: 200, w: 150, h: 70, kind: 'tensor',  sub: '(T)', status: 'done',
+      notes: `Integers, one per position. Nothing else survives from the text. \`T\` = sequence length (context). The model has no idea that 464 was "The" — that meaning has to be learned into row 464 of the embedding table.` },
+    { id: 'emb',   label: 'Token embedding',             x: 210,  y: 200, w: 180, h: 70, kind: 'weights', sub: 'lookup: vocab × d_model', child: 'embedding', status: 'done' },
+    { id: 'pos',   label: 'Positional info',             x: 210,  y: 330, w: 180, h: 70, kind: 'weights', sub: 'learned, or RoPE inside attention', child: 'positional', status: 'done' },
+    { id: 'add',   label: '+',                           x: 440,  y: 210, w: 50,  h: 50, kind: 'op', status: 'done',
+      notes: `Plain vector addition, \`x_t = E[id_t] + P[t]\`. Both are \`d_model\` long, so this is a coordinate-wise sum. Why add and not concatenate? Adding keeps \`d_model\` fixed, and the network can learn to keep "what" and "where" in different sub-directions of the same vector. With RoPE this box does nothing.` },
     { id: 'grp',   label: '× N identical blocks, each with its own weights. The residual stream (T × d_model) runs straight through all of them.',
       x: 530, y: 120, w: 610, h: 230, kind: 'group' },
     { id: 'blk1',  label: 'Block 1',                     x: 560,  y: 200, w: 150, h: 70, kind: 'weights', child: 'block' },
@@ -97,6 +99,158 @@ Almost all of them are in the blocks. The embedding and LM head are often the *s
 ## Shape check
 
 Input \`(T)\` ids → \`(T × d_model)\` all the way through → \`(T × vocab)\` at the end. During training we use all T rows of the logits (one prediction per position). During inference we only care about the last row.
+`
+},
+
+/* ------------------------------------------------------------------ */
+embedding: {
+  title: 'Token embedding',
+  widget: 'embedding',
+  nodes: [
+    { id: 'id',     label: 'token id',              x: 0,    y: 200, w: 140, h: 70, kind: 'tensor',  sub: 'e.g. 3', status: 'done',
+      notes: `One integer. Its only job is to select a row.` },
+    { id: 'onehot', label: 'one-hot',               x: 200,  y: 200, w: 150, h: 70, kind: 'tensor',  sub: '(vocab) · a 1 at index 3', status: 'done',
+      notes: `
+A vector as long as the vocabulary, all zeros except a single 1 at the token's index.
+
+\`[0, 0, 0, 1, 0, 0, 0, 0]\`
+
+This is the *mathematical* input to the model. In code nobody builds it — it would be 50k numbers to pick one row — but it makes the next step an ordinary matrix multiply, which is why gradients flow into the table exactly like any other weight.` },
+    { id: 'E',      label: 'Embedding matrix E',    x: 420,  y: 340, w: 200, h: 70, kind: 'weights', sub: '(vocab × d_model)', status: 'done',
+      notes: `
+The table. GPT-2: \`50257 × 768\` ≈ 38M numbers. Llama-3 8B: \`128256 × 4096\` ≈ 525M.
+
+- Initialised as small random noise.
+- Each training step, only the rows of tokens present in the batch get a gradient. Frequent tokens' rows are updated millions of times; rare tokens' rows barely move.
+- There is no rule about what the columns mean. Structure (cat ≈ dog, king − man + woman ≈ queen) *emerges* because it lowers the next-token loss.
+
+Often the same matrix is reused as the LM head at the output (weight tying): predicting token \`i\` = dot product with row \`i\`.` },
+    { id: 'mul',    label: 'onehot · E',            x: 420,  y: 200, w: 200, h: 70, kind: 'op',      sub: '= row 3 of E', status: 'done',
+      notes: `
+\`x = onehot(3) · E\`
+
+Multiply a \`(1 × vocab)\` by a \`(vocab × d_model)\` → \`(1 × d_model)\`. Every term is zero except the one where the 1 sits, so the result is literally row 3 copied out. Implementations do \`E[3]\` directly (\`nn.Embedding\`) — same result, no multiply.` },
+    { id: 'x',      label: 'x',                     x: 690,  y: 200, w: 140, h: 70, kind: 'tensor',  sub: '(d_model)', status: 'done',
+      notes: `The token's vector. From here on the model works only with these — \`T\` of them stacked into \`(T × d_model)\`. This is the *start* of the residual stream.` },
+    { id: 'learn',  label: 'What training does to E', x: 690, y: 340, w: 200, h: 70, kind: 'concept', status: 'done',
+      notes: `
+Nothing directly. The loss is about next-token prediction; \`E\` just receives whatever gradient flows back through the blocks. But the effect is systematic:
+
+- tokens that appear in interchangeable contexts get pushed toward the same direction (their rows must produce similar downstream behaviour);
+- directions become reusable features — a "plural-ness" direction, a "is-a-number" direction — because the blocks can only read linear-ish combinations.
+
+Toggle the widget below between random init and the (toy) trained table and watch the cosine-similarity grid go from noise to blocks.` },
+  ],
+  edges: [
+    ['id', 'onehot'], ['onehot', 'mul'], { from: 'E', to: 'mul', dir: 'v' }, ['mul', 'x'],
+    { from: 'E', to: 'learn', label: 'gradients', dir: 'h' },
+  ],
+  notes: `
+# Token embedding
+
+**Correction to hold on to:** the tokenizer gives an *id*. The *vector* is produced here, by the model, from learned weights.
+
+## Math
+
+\`\`\`
+E : (vocab × d_model)          learned
+x_t = E[id_t]                  lookup   (≡ onehot(id_t) · E)
+X   = [x_1; x_2; …; x_T]       (T × d_model)
+\`\`\`
+
+## Why a lookup and not a formula?
+
+Because there is nothing about the *number* 3290 that relates to "cat". Ids are arbitrary labels from BPE. A lookup table is the most general function from an arbitrary label to a vector — every id gets its own free parameters.
+
+## Where meaning comes from
+
+The rows start random. Training never says "make cat close to dog". It only says "predict the next token better". But if \`cat\` and \`dog\` show up before similar words, the cheapest way to predict well is to give them similar vectors, so the rest of the network can treat them alike. Similarity is a *side-effect* of compression.
+
+## Sizes
+
+- GPT-2: 50257 × 768
+- Llama-3 8B: 128256 × 4096 (≈ 6.5% of all params)
+- \`d_model\` is chosen by the designer; vocab is fixed by the tokenizer.
+`
+},
+
+/* ------------------------------------------------------------------ */
+positional: {
+  title: 'Positional information',
+  widget: 'positional',
+  nodes: [
+    { id: 'x',      label: 'x_t = E[id_t]',           x: 0,    y: 200, w: 170, h: 70, kind: 'tensor',  sub: '(d_model) · order-free', status: 'done',
+      notes: `The same token gives the same vector wherever it appears. \`"cat"\` at position 1 and at position 40 are identical at this point — that is the problem this scene solves.` },
+    { id: 'why',    label: 'Why: attention is\norder-blind', x: 0, y: 360, w: 170, h: 90, kind: 'concept', status: 'done',
+      notes: `
+Attention computes \`softmax(Q·Kᵀ)·V\`. Permute the input rows and every output row is permuted the same way — the operation is **permutation-equivariant**. It sees a *set* of tokens, not a *sequence*. The MLP is per-token and doesn't help either.
+
+So \`"dog bites man"\` and \`"man bites dog"\` would be indistinguishable. Position must be injected somewhere.` },
+    { id: 'grp',    label: 'pick one — every model uses exactly one scheme', x: 240, y: 90, w: 380, h: 420, kind: 'group' },
+    { id: 'learned', label: 'Learned table P',        x: 270,  y: 130, w: 320, h: 70, kind: 'weights', sub: '(T_max × d_model) · GPT-2', status: 'done',
+      notes: `
+A second lookup, indexed by position instead of id: \`P[t]\`. Free parameters, learned like \`E\`.
+
+- Simple, works.
+- Hard limit: no row for \`t > T_max\`. GPT-2 cannot see position 1025.
+- No built-in notion that position 7 is "near" position 8 — it has to learn that too.` },
+    { id: 'sin',    label: 'Sinusoidal (fixed)',     x: 270,  y: 250, w: 320, h: 70, kind: 'op',      sub: 'no weights · original Transformer', status: 'done',
+      notes: `
+\`\`\`
+PE[t, 2i]   = sin( t / 10000^(2i/d) )
+PE[t, 2i+1] = cos( t / 10000^(2i/d) )
+\`\`\`
+
+Each pair of dimensions is a clock hand turning at its own speed: dim 0/1 spins fast, the last pair barely moves. Together they form a unique "timestamp" per position — like reading hours, minutes, seconds.
+
+Nice property: \`PE[t+k]\` is a fixed linear function of \`PE[t]\` (a rotation), so "k steps ahead" is easy to express. Green because there is nothing to learn.` },
+    { id: 'rope',   label: 'RoPE (rotary)',          x: 270,  y: 370, w: 320, h: 70, kind: 'op',      sub: 'rotates Q, K inside attention · Llama', status: 'done',
+      notes: `
+Adds nothing to \`x\`. Instead, inside every attention layer, pair up the dimensions of \`q\` and \`k\` and rotate each pair by an angle \`t · θ_i\` (position × a per-pair frequency):
+
+\`\`\`
+q'_m = R(m·θ) q        k'_n = R(n·θ) k
+q'_m · k'_n = qᵀ R((m−n)·θ) k       ← depends only on m − n
+\`\`\`
+
+So the attention score sees *relative* distance, never absolute position. Consequences: no \`T_max\` table, better length extrapolation, and the "+ Positional" box on the Model scene is empty. Play with it below.` },
+    { id: 'add',    label: '+',                      x: 680,  y: 210, w: 50,  h: 50, kind: 'op', status: 'done',
+      notes: `\`x_t + P[t]\` (learned or sinusoidal). Coordinate-wise. The network learns to keep "what" and "where" in separable directions of the same vector.` },
+    { id: 'out',    label: 'x_t + P[t]',             x: 790,  y: 200, w: 170, h: 70, kind: 'tensor',  sub: '(d_model) → block 1', status: 'done',
+      notes: `Now the same token at two positions gives two different vectors. Attention can tell them apart. With RoPE, this box is just \`x_t\` and the distinction is made later, inside each attention layer.` },
+    { id: 'attn',   label: 'attention (Q, K)',       x: 790,  y: 370, w: 170, h: 70, kind: 'weights', sub: 'inside every block', status: 'done',
+      notes: `Where RoPE does its work — see the Attention scene. The rotation is applied to Q and K after their projections, before the dot product. V is left alone.` },
+  ],
+  edges: [
+    ['x', 'add'], ['learned', 'add'], ['sin', 'add'], ['add', 'out'],
+    { from: 'rope', to: 'attn', label: 'rotate q, k by position', dir: 'h' },
+    { from: 'why', to: 'x', dir: 'v' },
+  ],
+  notes: `
+# Positional information
+
+## The problem
+
+Attention is a function of a *set*. Without position, \`"dog bites man"\` = \`"man bites dog"\`. Something has to break the symmetry.
+
+## When it happens
+
+- **Learned / sinusoidal:** once, right after the embedding lookup, before block 1. \`x_t ← E[id_t] + P[t]\`.
+- **RoPE:** never added to \`x\`. Applied to \`q\` and \`k\` inside *every* attention layer.
+
+## The three schemes in one line each
+
+- **Learned table** — \`P[t]\` free parameters; simplest; hard length limit.
+- **Sinusoidal** — fixed sin/cos "clock hands" at many frequencies; no weights; unbounded.
+- **RoPE** — rotate \`q, k\` by \`t·θ\`; the score \`q_m·k_n\` then depends only on \`m − n\`. What almost everything uses now.
+
+## Why the relative version wins
+
+Language cares about "how far apart" far more than "absolute index". A verb attends to its subject two tokens back whether the sentence starts at position 0 or 900. RoPE bakes that in; the learned table has to discover it for every pair of positions separately.
+
+## Widget below
+
+Top: the sinusoidal table as a heatmap — slide the position and watch the fast dims flip while slow dims crawl. Bottom: RoPE on a 2-D pair. Move \`m\` and \`n\`; the dot product only changes when their *difference* does.
 `
 },
 

@@ -90,6 +90,11 @@ main{display:flex;height:calc(100% - 44px)}
 .word{display:inline-block;margin:2px 10px 4px 0;padding:2px 4px;border:1px solid var(--line);border-radius:5px} .word small{color:var(--muted);margin-left:4px;font-size:10px}
 .widget .hm-title{margin-top:10px}
 .chips{margin:6px 0;line-height:1.9}
+.hm tr.hl th{color:#fff;font-weight:bold} .hm tr.hl td{outline:2px solid #fff;outline-offset:-2px}
+.toks{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+.toks .tk{background:#20263a;border:1px solid var(--line);color:var(--muted);padding:2px 8px;border-radius:5px;cursor:pointer;font-size:12px}
+.toks .tk.on{color:#fff;border-color:#fff}
+.widget .row label{margin-right:10px} .widget .row input[type=range]{width:90px}
 
 #tab-map ul{list-style:none;padding-left:14px;margin:4px 0}
 #tab-map>ul{padding-left:0}
