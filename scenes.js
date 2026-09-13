@@ -14,7 +14,7 @@ root: {
   title: 'Whole picture',
   nodes: [
     { id: 'data',      label: 'Raw text\n(web, books, code)', x: 0,    y: 200, w: 180, h: 80,  kind: 'tensor' },
-    { id: 'tokenizer', label: 'Tokenizer',                    x: 240,  y: 200, w: 170, h: 80,  kind: 'op',      child: 'tokenizer' },
+    { id: 'tokenizer', label: 'Tokenizer',                    x: 240,  y: 200, w: 170, h: 80,  kind: 'op',      child: 'tokenizer', status: 'done' },
     { id: 'ids',       label: 'Token IDs',                    x: 470,  y: 200, w: 170, h: 80,  kind: 'tensor',  sub: '[464, 3290, 3332, …]' },
     { id: 'model',     label: 'Model\n(Transformer)',         x: 700,  y: 180, w: 220, h: 120, kind: 'weights', child: 'model' },
     { id: 'logits',    label: 'Logits',                       x: 990,  y: 200, w: 180, h: 80,  kind: 'tensor',  sub: 'one score per vocab token' },
@@ -223,15 +223,137 @@ Modern variants (Llama) use a *gated* version — SwiGLU — with three matrices
 /* ------------------------------------------------------------------ */
 tokenizer: {
   title: 'Tokenizer',
+  widget: 'bpe_encode',
   nodes: [
-    { id: 'text',  label: '"The cat sat"',              x: 0,    y: 200, w: 170, h: 70, kind: 'tensor' },
-    { id: 'norm',  label: 'Normalise',                  x: 230,  y: 200, w: 150, h: 70, kind: 'op',      sub: 'unicode, whitespace' },
-    { id: 'pre',   label: 'Pre-tokenise',               x: 440,  y: 200, w: 170, h: 70, kind: 'op',      sub: 'split on spaces / punct' },
-    { id: 'bpe',   label: 'BPE merges',                 x: 670,  y: 200, w: 170, h: 70, kind: 'weights', sub: 'learned merge table' },
-    { id: 'vocab', label: 'Vocabulary',                 x: 670,  y: 340, w: 170, h: 70, kind: 'weights', sub: '32k – 200k entries' },
-    { id: 'ids',   label: '[464, 3290, 3332]',           x: 900,  y: 200, w: 180, h: 70, kind: 'tensor' },
+    { id: 'text',    label: '"The cat sat"',        x: 0,    y: 200, w: 170, h: 70, kind: 'tensor',  status: 'done',
+      notes: `Plain text. Unicode, any language, code, emoji — the tokenizer has to handle *all* of it, which is why modern ones work on **bytes** underneath, not characters or words.` },
+    { id: 'pre',     label: 'Pre-tokenise',         x: 230,  y: 200, w: 170, h: 70, kind: 'op',      sub: 'regex → "words"', status: 'done',
+      notes: `
+A fixed regex splits text into chunks that merges are *not allowed to cross*. GPT-style: a chunk is a run of letters, or a run of digits, or punctuation — **with its leading space attached**.
+
+\`"The cat sat"\` → \`["The", " cat", " sat"]\`
+
+That leading space is why \`"The"\` and \`" The"\` end up as different tokens. It also means a merge can never glue two words together, which keeps the vocabulary sane.` },
+    { id: 'bytes',   label: 'Bytes',                x: 460,  y: 200, w: 150, h: 70, kind: 'tensor',  sub: 'UTF-8 · 256 base tokens', status: 'done',
+      notes: `
+Each chunk becomes its raw UTF-8 bytes. The 256 possible byte values are the **base vocabulary** — tokens 0–255 exist before any learning.
+
+Consequence: there is no "unknown word". Anything at all can be represented, worst case as one token per byte. Rare words, typos, other scripts just cost *more* tokens.` },
+    { id: 'merges',  label: 'Apply BPE merges',     x: 670,  y: 200, w: 190, h: 70, kind: 'weights', sub: 'learned merge table, by rank', child: 'bpe', status: 'done',
+      notes: `
+This is the real tokenizer. It holds an ordered list of merge rules learned from data, like
+
+1. \`t\` + \`h\` → \`th\`
+2. \`th\` + \`e\` → \`the\`
+3. \` \` + \`the\` → \` the\`
+…
+
+To encode a chunk: start from its bytes, repeatedly find the pair with the **lowest rank** (earliest-learned) that appears, merge it, repeat until nothing matches. Same rules, same order, every time — it's deterministic.
+
+Orange because it is *learned* — but learned by counting, not by gradient descent. Double-click to see how.` },
+    { id: 'vocab',   label: 'Vocabulary',           x: 670,  y: 350, w: 190, h: 70, kind: 'weights', sub: 'token ↔ id · 50k–200k', status: 'done',
+      notes: `
+The dictionary you were thinking of. One entry per token: the 256 bytes plus one entry per merge. GPT-2: 50,257. Llama-3: 128,256. GPT-4o: ~200k.
+
+It is a *by-product* of training the merges: every merge creates exactly one new vocabulary entry. So vocab size = 256 + number of merges + special tokens.
+
+Only used at the very end, to swap each final piece for its integer.` },
+    { id: 'ids',     label: '[464, 3290, 3332]',    x: 920,  y: 200, w: 180, h: 70, kind: 'tensor',  sub: 'token ids', status: 'done',
+      notes: `Just integers. The model never sees text — from here on, 464 is a row index into the embedding table and nothing more. Whether 464 "means" \`The\` is entirely learned later.` },
+    { id: 'special', label: 'Special tokens',       x: 230,  y: 350, w: 190, h: 70, kind: 'concept', sub: '<|endoftext|>, chat roles', status: 'done',
+      notes: `
+A handful of tokens that never come from text: \`<|endoftext|>\` (document boundary / stop), and in chat models the role markers (\`<|user|>\`, \`<|assistant|>\` …). They're added to the vocab by hand and the pre-tokeniser is told to match them literally.
+
+Their embeddings are learned like any other token's — the model learns what "assistant turn starts here" means only from seeing it in training.` },
   ],
-  edges: [['text', 'norm'], ['norm', 'pre'], ['pre', 'bpe'], ['vocab', 'bpe'], ['bpe', 'ids']],
+  edges: [
+    ['text', 'pre'], ['pre', 'bytes'], ['bytes', 'merges'], ['merges', 'ids'],
+    { from: 'vocab', to: 'ids', label: 'lookup', dir: 'h' },
+    ['special', 'pre', 'matched literally'],
+  ],
+  notes: `
+# Tokenizer
+
+**Misconception check:** "is the tokenizer a dictionary of word → number?"
+
+Half right. There *is* a dictionary at the end (the Vocabulary box). But:
+
+- the entries are **learned pieces**, not words — chosen purely by frequency in the training text;
+- **spaces belong to tokens** — \`"The"\`, \`" The"\`, \`"the"\` are three different ids;
+- there is a **process** before the lookup: split → bytes → apply merges in learned order → then look up.
+
+The dictionary is the *output* of the tokenizer's training, not the tokenizer.
+
+## Why not just words?
+
+- Vocab would be unbounded (every name, typo, number, language).
+- Anything unseen would be \`<unk>\` — the model could never read it.
+- Words share structure (\`walk / walked / walking\`) that sub-word pieces expose for free.
+
+## Why not just characters / bytes?
+
+It works, but sequences get 4–5× longer and attention cost grows with the *square* of length. Sub-words are the compromise: common things are one token, rare things are several.
+
+## Things that fall out of this
+
+- \`"tokenization"\` → \`token\` + \`ization\`. Common stems become single tokens; suffixes get their own.
+- Numbers split arbitrarily: \`12345\` might be \`123\` + \`45\`. This is one reason arithmetic is hard for LLMs.
+- English costs ~1 token per 4 characters; Hindi or code can cost 2–4× more for the same meaning, because the merges were learned mostly from English.
+- The tokenizer is **frozen before the model is trained** and never changes. The model's first layer is a lookup table indexed by these ids, so changing the tokenizer means retraining the model.
+
+Try the encoder below. It uses merges learned from a tiny built-in corpus (see the BPE scene), so it is *bad* at anything outside that corpus — which is exactly the lesson: a tokenizer only knows what it was trained on.
+`
+},
+
+/* ------------------------------------------------------------------ */
+bpe: {
+  title: 'Training the tokenizer (BPE)',
+  widget: 'bpe_train',
+  nodes: [
+    { id: 'corpus', label: 'Training corpus',          x: 0,    y: 200, w: 180, h: 70, kind: 'tensor',  sub: 'a sample of the LLM training text', status: 'done',
+      notes: `Usually a few GB sampled from the same data the model will be trained on. Whatever is frequent *here* gets short tokens. That is why English is cheap and other languages are expensive.` },
+    { id: 'split',  label: 'Pre-tokenise → bytes',    x: 240,  y: 200, w: 190, h: 70, kind: 'op', status: 'done',
+      notes: `Same split as at encode time. Each chunk starts as a list of single bytes. Count how many times each distinct chunk occurs so the loop can work on unique chunks weighted by frequency.` },
+    { id: 'count',  label: 'Count adjacent pairs',    x: 490,  y: 200, w: 190, h: 70, kind: 'op', status: 'done',
+      notes: `For every chunk, for every neighbouring pair of current symbols, add the chunk's frequency to that pair's count. \`t,h\` in "the" (×1000) and "that" (×300) → 1300.` },
+    { id: 'pick',   label: 'Pick most frequent pair', x: 740,  y: 200, w: 200, h: 70, kind: 'op', status: 'done',
+      notes: `Greedy. No lookahead, no notion of meaning. The only signal is "these two symbols sit next to each other a lot".` },
+    { id: 'merge',  label: 'Merge it everywhere',     x: 1000, y: 200, w: 190, h: 70, kind: 'op', status: 'done',
+      notes: `Replace every occurrence of the pair with one new symbol. Append the rule to the merge list — its position in the list is its **rank**, which is what the encoder uses to decide order later.` },
+    { id: 'add',    label: 'Add token to vocab',      x: 1250, y: 200, w: 180, h: 70, kind: 'weights', sub: 'vocab grows by 1', status: 'done',
+      notes: `New symbol gets the next free id. The vocabulary and the merge list grow in lock-step: 256 bytes + one token per merge.` },
+    { id: 'stop',   label: 'Stop at target vocab size', x: 1250, y: 380, w: 180, h: 70, kind: 'concept', sub: 'e.g. 50k, 128k', status: 'done',
+      notes: `The vocab size is a design choice made *before* training. Bigger vocab → shorter sequences but a bigger embedding table and rarer, worse-trained tokens. 32k–200k is the usual range.` },
+  ],
+  edges: [
+    ['corpus', 'split'], ['split', 'count'], ['count', 'pick'], ['pick', 'merge'], ['merge', 'add'], ['add', 'stop'],
+    { from: 'add', to: 'count', label: 'repeat', arc: -150 },
+  ],
+  notes: `
+# Byte-Pair Encoding
+
+The whole algorithm is one loop:
+
+\`\`\`
+symbols = bytes of every chunk
+repeat (vocab_size − 256) times:
+    pair  = most frequent adjacent (a, b)
+    merge every "a b" into "ab"
+    merges.append((a, b));  vocab.append("ab")
+\`\`\`
+
+That's it. No neural network, no gradients. It is *learned* only in the sense that the result depends on the data.
+
+## Why it produces sensible pieces
+
+Frequent letter pairs merge first (\`t h\`), then frequent triples form from those (\`th e\`), then whole common words (\` the\`). Rare words never accumulate enough count to get their own token, so they stay as a few pieces. The vocabulary ends up matching the statistics of the text, which is precisely what you want for a next-token predictor.
+
+## Watch it happen
+
+Step through the trainer below. Watch \`l o w e s t\` collapse into \`low est\` as the merges accumulate, and notice which pair it picks each time — always the most common one, nothing smarter.
+
+Modern tokenizers (GPT-4, Llama-3) are this exact algorithm plus a few engineering details: byte-level base vocab, the pre-tokeniser regex, and a handful of special tokens.
+`
 },
 
 /* ------------------------------------------------------------------ */
