@@ -69,6 +69,217 @@ Double-click any box marked ⤵ to zoom inside it.
 /* ------------------------------------------------------------------ */
 model: {
   title: 'Model',
+  story: `
+# The Transformer Model — Residual Streams and Deep Stacking
+
+## The Core Idea (Simple English)
+
+An LLM is a stack of **80 identical blocks**, each doing the same two things:
+1. **Attention** — tokens exchange information
+2. **MLP** — each token thinks independently
+
+What makes this work is the **residual stream**: a shared vector that flows left-to-right through all 80 blocks, and each block *adds* to it rather than replaces it.
+
+Without residual streams, you couldn't stack 80 layers. Gradients would vanish. Information would be lost. Deep learning would be impossible.
+
+## The Analogy: A Relay Race vs. a Workbench
+
+**Bad way (no residuals):**
+\`\`\`
+Runner 1 picks up the baton and runs 100m
+Runner 2 takes it and runs 100m from the new starting point
+Runner 3 takes it and runs 100m again
+…
+If Runner 1 goes the wrong direction, everyone after is lost.
+Gradient signal (like a rope pulled backward) snaps after a few runners.
+\`\`\`
+
+**Good way (residual):**
+\`\`\`
+A whiteboard in the middle. People stand at desks around it.
+
+Person 1 reads the board, writes a note: "also consider X"
+Person 2 reads the board (including Person 1's note), writes: "and also Y"
+Person 3 reads everything, writes: "and also Z"
+…
+Person 80 reads all 80 notes and makes the final decision.
+
+At every step, the *entire history* is visible. Everyone can contribute a small delta.
+Feedback (gradients) can reach Person 1 directly — no long chain to break.
+\`\`\`
+
+**That's the residual stream.** The board is the shared (T, d_model) matrix. Each block writes to it, never erases.
+
+## The Math
+
+### The Residual Update Formula
+
+In a standard deep network (no residuals):
+\`\`\`
+x = f_1(x)
+x = f_2(x)
+x = f_3(x)
+…
+x = f_80(x)
+\`\`\`
+
+Each function replaces the previous value. Gradients multiply and decay exponentially.
+
+With residuals:
+\`\`\`
+x = x + f_1(x)      ← attention + MLP of block 1
+x = x + f_2(x)      ← attention + MLP of block 2
+…
+x = x + f_80(x)     ← attention + MLP of block 80
+\`\`\`
+
+Each function adds a *delta* back to the stream. Gradients add up instead of multiplying.
+
+### Shape Contract
+
+This is critical. Every block must preserve shape:
+
+**Input to block i:**
+\`\`\`
+x : (T × d_model)
+where T = sequence length, d_model = 768 for GPT-2
+\`\`\`
+
+**Inside the block:**
+\`\`\`
+LayerNorm(x)  : (T × d_model) → (T × d_model)  [just normalizes]
+Attention(…)  : (T × d_model) → (T × d_model)  [mixes across positions]
+x + Attention(…) : (T × d_model)                [add back]
+
+LayerNorm(x)  : (T × d_model) → (T × d_model)
+MLP(…)        : (T × d_model) → (T × d_model)  [per-position thinking]
+x + MLP(…)    : (T × d_model)                   [add back]
+\`\`\`
+
+**Output of block i:**
+\`\`\`
+x : (T × d_model)  [same shape as input]
+\`\`\`
+
+Because every block preserves shape, you can chain them infinitely. This is why transformers scale: 80 blocks look like 1 block from the outside (same (T, d_model) in and out).
+
+### The Residual Stream is NOT One Vector
+
+**Critical:** the residual stream is a **matrix with one vector per token**.
+
+\`\`\`
+Stream shape: (T, d_model) = (10 tokens, 768 dimensions)
+
+Position 0: [0.5,  -0.2,  0.8,  …]    ← token 0's vector
+Position 1: [0.1,   0.3,  0.2,  …]    ← token 1's vector
+Position 2: [-0.4,  0.6, -0.1,  …]    ← token 2's vector
+…
+Position 9: [0.4,  -0.1,  0.2,  …]    ← token 9's vector
+\`\`\`
+
+- **Attention** routes information between positions (position 5 can read from positions 0, 2, 5, etc.)
+- **MLP** refines each position independently (never looks at neighbors)
+
+Both add their outputs back to update all T vectors.
+
+## Why Gradients Don't Vanish
+
+### The Problem Without Residuals
+
+When you chain 80 functions:
+\`\`\`
+f_80(f_79(…f_1(x)…))
+
+Backward pass (gradients):
+∂loss/∂x_0 = ∂loss/∂x_80 · ∂x_80/∂x_79 · … · ∂x_1/∂x_0
+           = product of 80 derivatives
+
+If each derivative ≈ 0.9, then:
+gradient ≈ 0.9^80 ≈ 10^-4  (vanishingly small)
+\`\`\`
+
+Layers near the input can't learn — gradients are too weak.
+
+### With Residuals
+
+\`\`\`
+x_0 ──────────────┐
+                  ├──→ x_1 ──────────────┐
+              f_1(x_0)                   ├──→ … ──→ x_80
+                                      f_2(x_1)
+
+Backward pass (gradients):
+∂loss/∂x_0 = ∂loss/∂x_1 + ∂loss/∂x_2 + … + ∂loss/∂x_80
+           └─────── direct path ───────┘
+
+The direct x_0 → x_80 path is always strength 1 (the + operation).
+Gradients add: even if intermediate chains are weak, the main highway is strong.
+Gradient ≈ 80 · (small signal) = stronger signal
+\`\`\`
+
+This is called the **identity shortcut**. Crucially, gradients don't have to flow through all 80 blocks sequentially — they have a direct path to layer 1.
+
+## Parameter Breakdown
+
+For GPT-2 small:
+
+\`\`\`
+Total: ≈ 124M parameters
+
+Embedding table E:           38M  (30%)
+Positional table P:           0.8M ( 1%)
+N = 12 blocks:              82M  (66%)
+  - Each block:
+    - Attention: 4·d² params = 2.4M
+    - MLP:       8·d² params = 4.8M  ← this is why MLP dominates
+LM head:                     38M  (30%)
+\`\`\`
+
+Note: embedding and LM head are often the *same* matrix (weight tying).
+
+**Key insight:** MLP is 45% of the parameters. It's what makes the model large.
+
+## The Flow
+
+\`\`\`
+Input: token IDs  (T,)
+
+E[ids]:            (T, 768)
++ P[positions]:    (T, 768)
+= x:               (T, 768)
+
+Block 1:
+  x = x + Attn(LN(x))
+  x = x + MLP(LN(x))    → (T, 768)
+
+Block 2:
+  x = x + Attn(LN(x))
+  x = x + MLP(LN(x))    → (T, 768)
+
+…
+
+Block 12:
+  x = x + Attn(LN(x))
+  x = x + MLP(LN(x))    → (T, 768)
+
+LN(x):             (T, 768)
+× W_head^T:        (T, vocab)
+
+Logits:            (T, 50257)  ← one score per vocabulary token, per position
+\`\`\`
+
+During training: all T rows are used (one prediction per position).
+During inference: only the last row matters (predicting the next token).
+
+## Why This Design
+
+1. **Stability:** residuals keep signals alive across 80 layers
+2. **Efficiency:** once you have the shape contract, blocks are interchangeable
+3. **Modularity:** attention and MLP are independent; could swap one out without breaking others
+4. **Information preservation:** all layers can "see" the original input via the skip connection
+
+The residual stream is the **single most important idea** in transformers. Without it, deep learning at this scale wouldn't work.
+`,
   tour: [
     { node: null, title: 'Inside the model', text: 'One tensor — the residual stream, `(T × d_model)` — flows left to right. Every stage *adds* to it. Nothing replaces it.' },
     { node: 'ids', text: 'T integers in. This is where the tokenizer hands over.' },
@@ -127,6 +338,78 @@ Input \`(T)\` ids → \`(T × d_model)\` all the way through → \`(T × vocab)\
 /* ------------------------------------------------------------------ */
 embedding: {
   title: 'Token embedding',
+  story: `
+# Token Embedding — Turning IDs Into Vectors
+
+## The Problem (Simple English)
+
+The tokenizer gave us numbers. But numbers are just labels. The number 3290 tells you nothing about what "cat" means. The model can't work with bare integers — it needs *vectors* that encode meaning.
+
+So we need to convert token IDs into vectors that capture information. How? With a lookup table that the model *learns during training*.
+
+## The Analogy: A Dictionary of Personalities
+
+Imagine you run a restaurant and want to understand your customers. You give each person a unique ID (customer 47, customer 81, etc.), but IDs don't tell you anything.
+
+So you create a "personality profile" for each customer:
+- customer 47: [friendly=0.8, quiet=0.2, adventurous=0.6, ...]
+- customer 81: [friendly=0.3, quiet=0.9, adventurous=0.1, ...]
+
+These profiles start as random guesses. But over time, as you serve customers and learn what they like, the profiles update. Customers with similar tastes end up with similar profiles.
+
+**That's the embedding.** Each token gets a vector (personality profile). The vector starts random. Over training, tokens that appear in similar contexts drift toward each other.
+
+## The Math
+
+$$E : (vocab \\times d_{model})$$  — the embedding table, shape 50257 × 768 for GPT-2
+
+$$x_t = E[id_t]$$  — lookup: pull row id_t from table E
+
+$$X = [x_1; x_2; \\ldots; x_T]$$  — stack all T token vectors → (T × d_model)
+
+### Why a lookup table?
+
+Token IDs are *arbitrary* labels from BPE. There's no mathematical relationship between the number 3290 and the concept "cat". A lookup table is the most general way to map an arbitrary label to a vector — every ID gets its own row of free parameters.
+
+Compare: a lookup is **maximally flexible**. A formula like "x = 2·id" would tie all tokens to a 1D line; a table lets each token be anywhere in d_model dimensional space.
+
+### What happens during training
+
+- The loss function measures: "did you predict the next token correctly?"
+- Gradients flow back through the blocks, then into the rows of E
+- Only rows for tokens that appear in this batch get updated
+- But over millions of training steps, patterns emerge:
+  - tokens in similar contexts get similar gradients
+  - their rows drift together (cos-similarity increases)
+  - the model learns "king − man + woman ≈ queen" as a *side-effect* of compression
+
+No rule says "make cat close to dog". The model discovers it because shared vectors save parameters and lower loss.
+
+### Shape contract
+
+- Input: one token ID (a scalar, 0–50256)
+- One-hot: a vector of length vocab with a 1 at the ID, 0s elsewhere
+  - \`onehot(3290) = [0, 0, …, 0, 1, 0, …, 0]\`  (length 50257)
+- Multiply: \`onehot · E\` is a (1 × vocab) × (vocab × d_model) → (1 × d_model)
+  - All terms are 0 except the row at index 3290, which gets copied out
+- Result: \`x = [0.5, -0.2, 0.8, …]\`  (length 768)
+
+In code, nobody builds the one-hot. Instead: \`E[id]\` (direct indexing). Same math, faster.
+
+### Example: GPT-2 small
+
+- vocab = 50257 (every unique token)
+- d_model = 768 (hidden size)
+- E has 50257 × 768 ≈ 38M numbers
+- **Learned parameters**: yes, all of them
+
+### Sizes in other models
+
+- Llama-3 8B: vocab = 128256, d_model = 4096 → ≈ 525M params (≈6.5% of 8B)
+- GPT-3 175B: similar ratio
+
+Embedding is a large table, but small compared to the blocks (which dominate).
+`,
   tour: [
     { node: null, title: 'id → vector', text: 'The tokenizer gave an integer. Here the model turns it into a vector — by looking up a learned table.' },
     { node: 'id', text: 'One integer. Its only role is to pick a row.' },
@@ -208,6 +491,168 @@ The rows start random. Training never says "make cat close to dog". It only says
 /* ------------------------------------------------------------------ */
 positional: {
   title: 'Positional information',
+  story: `
+# Positional Encoding — Telling the Model "Where"
+
+## The Problem (Simple English)
+
+Here's a puzzle: **attention doesn't care about order**.
+
+Attention computes how similar token A is to token B, and mixes them based on that similarity. But this operation is *permutation-equivariant*: if you shuffle the input tokens, the outputs shuffle identically.
+
+**Result:** the model can't tell the difference between:
+- "the dog bit the man"
+- "man the the dog bit"
+
+Both have the same tokens. Without position, they're indistinguishable.
+
+**Solution:** inject position somehow. Before tokens go through attention, we add a signal that says "you are at position 0", "you are at position 5", etc.
+
+## The Analogy: Seating Around a Table
+
+Imagine 10 people in a coffee shop who can talk to anyone. But their conversation depends on where they sit:
+- Person at seat 0: near the door
+- Person at seat 9: by the window
+- Two people 3 seats apart have different dynamics than two people 9 seats apart
+
+Before they start talking, you whisper to each person: *"You're at seat N."* It becomes part of their identity.
+
+**Similarly,** before tokens go through attention:
+\`\`\`
+Token vector:    [0.5, -0.2, 0.8, …]      (from embedding)
+Position signal: [0.1,  0.3, 0.2, …]      (depends on position index)
+                 ──────────────────
+Combined:        [0.6,  0.1, 1.0, …]      (now it knows both what AND where)
+\`\`\`
+
+Each token now carries two pieces of info: its identity and its location.
+
+## The Math: Three Schemes
+
+### Scheme 1: Learned Position Table (GPT-2)
+
+Just like token embedding \`E[id]\`, create a position table \`P[position]\`.
+
+$$P : (T_{max} \\times d_{model})$$  — another lookup table, indexed by position
+
+$$x_t = E[id_t] + P[t]$$  — coordinate-wise addition
+
+**Example (GPT-2 small):**
+- T_max = 1024 (max sequence length)
+- d_model = 768
+- P has 1024 × 768 ≈ 0.8M parameters (learned)
+
+**Pros:**
+- Simple: just add
+- Learned exactly what position signals matter
+
+**Cons:**
+- Hard limit: can't see tokens beyond T_max (GPT-2 max context = 1024)
+- Must learn that "position 7 is near position 8" separately for each pair
+
+### Scheme 2: Sinusoidal (Fixed, Original Transformer)
+
+Don't learn P. Instead, *compute* it using math:
+
+$$PE[t, 2j]     = \\sin(t / 10000^{2j/d_{model}})$$  — even dimensions are sine
+
+$$PE[t, 2j+1]   = \\cos(t / 10000^{2j/d_{model}})$$  — odd dimensions are cosine
+
+where:
+- t = position (0, 1, 2, …, T-1)
+- j = dimension index (0, 1, 2, …, 384) for d_model = 768
+
+**What this does:**
+
+Different dimensions encode different frequencies:
+- Dimensions 0, 1: fast oscillation (angle updates every step)
+- Dimensions 766, 767: slow oscillation (angle barely changes)
+
+Together they form a unique "timestamp" per position — like reading hours, minutes, seconds on a clock with many hands.
+
+**Example:**
+\`\`\`
+PE[0] = [sin(0/1), cos(0/1), sin(0/10000^2/768), cos(…), …]
+      = [0, 1, 0, 1, 0, 1, …]
+
+PE[1] = [sin(1/1), cos(1/1), sin(1/10000^2/768), …]
+      ≈ [0.841, 0.540, 0.00013, …]
+
+PE[100] = [sin(100/1), cos(100/1), …]
+        ≈ [-0.506, -0.861, …]
+\`\`\`
+
+**Key insight:** position 100 and position 101 differ by the same amount no matter what dimension you look at — the relative distance is encoded consistently.
+
+**Pros:**
+- No learned parameters (it's just math)
+- Unbounded: works for any sequence length
+- Natural notion of relative distance (PE[t+k] is a fixed linear transformation of PE[t])
+
+**Cons:**
+- Fixed forever (can't adapt to data)
+
+### Scheme 3: RoPE (Rotary Position Embedding, Modern Standard)
+
+Don't add position to x. Instead, *rotate* the query and key vectors *inside attention*.
+
+$$\\theta = t \\cdot (1 / 10000^{2j/d_{model}})$$  — same frequency formula
+
+$$q'_m = R(m \\cdot \\theta) q$$  — rotate Q vector by angle m·θ
+
+$$k'_n = R(n \\cdot \\theta) k$$  — rotate K vector by angle n·θ
+
+When you compute the attention score:
+
+$$q'_m \\cdot k'_n = q^T R((m-n)\\theta) k$$  ← depends only on (m−n), the relative distance!
+
+**What this means:**
+
+- Absolute position doesn't matter
+- Only relative distance m − n appears in the score
+- Language naturally cares about "how far apart" not "absolute index"
+  - A verb attends to its subject 2 tokens back, whether that's position 0 or position 900
+
+**Pros:**
+- No T_max limit
+- Relative distance baked in from physics
+- Better length extrapolation (model trained on short sequences can handle long ones)
+- What Llama, Mistral, modern LLMs use
+
+**Cons:**
+- More complex (2D rotations in embedding space)
+- Requires applying the rotation inside every attention layer
+
+## Comparison Table
+
+| Aspect | Learned | Sinusoidal | RoPE |
+|--------|---------|-----------|------|
+| Parameters | Yes (1B for 1k ctx) | No | No |
+| Max length | Hard limit (T_max) | Unbounded | Unbounded |
+| Relative distance | Learned implicitly | Natural (sin/cos shift) | Natural (rotation angle) |
+| Used by | GPT-2, older | Original Transformer | Llama, Mistral, most modern |
+| Extrapolation | Poor | Good | Excellent |
+
+## When Position is Applied
+
+For learned and sinusoidal: **once, after embedding, before block 1**
+\`\`\`
+x = E[id] + P[t]
+  → Block 1 → Block 2 → … → Block N
+\`\`\`
+
+For RoPE: **never added to x**. Instead applied inside the attention computation in *every* block:
+\`\`\`
+x = E[id]  (no position here)
+  → Block 1: attention rotates q, k by position angle
+  → Block 2: attention rotates q, k by position angle (independently)
+  → …
+\`\`\`
+
+## Why This Matters
+
+Without position, the model sees text as a *set* of tokens, not a *sequence*. Adding position breaks the symmetry and lets attention know where each token stands relative to others. This is non-negotiable — without it, word order is meaningless.
+`,
   tour: [
     { node: null, title: 'Breaking the symmetry', text: 'Attention treats its input as a *set*. Position has to be injected. Three schemes; every model picks exactly one.' },
     { node: 'why', text: 'Permute the rows going into attention and the outputs permute identically. "dog bites man" = "man bites dog". The MLP is per-token and cannot help.' },

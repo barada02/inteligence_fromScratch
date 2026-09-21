@@ -208,6 +208,18 @@ function showNotes(n, quiet) {
   if (!quiet) activateTab('notes');
 }
 
+function showStory(n, quiet) {
+  const sc = cur(), t = n || sc, box = $('#tab-story'); box.innerHTML = '';
+  const head = document.createElement('div'); head.className = 'nhead';
+  head.innerHTML = `<div class="kicker">${n ? 'story · ' + (n.kind || 'op') : 'scene story'}</div><h1>${esc(n ? n.label.replace(/\n/g, ' ') : sc.title)}</h1>`;
+  if (n && n.sub) head.innerHTML += `<span class="pill">${esc(n.sub)}</span>`;
+  box.appendChild(head);
+  const body = document.createElement('div'); body.className = 'md';
+  body.innerHTML = md(t.story || '*No story written yet.* This appears after learning phase discussion.');
+  box.appendChild(body);
+  if (!quiet) activateTab('story');
+}
+
 function renderMap() {
   const box = $('#tab-map'); box.innerHTML = '';
   function item(id, path) {
@@ -236,7 +248,10 @@ function activateTab(name) {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.id === 'tab-' + name));
 }
-document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => activateTab(b.dataset.tab));
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  if (b.dataset.tab === 'story') showStory(selected ? byId(cur(), selected) : null, true);
+  activateTab(b.dataset.tab);
+});
 
 /* ---------- minimal markdown (headings, lists, bold/italic/code, fenced code) ---------- */
 function md(src) {
