@@ -9,18 +9,20 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #0f1115;
-  --panel: #161a22;
-  --line: #2a3140;
-  --text: #e6e9ef;
-  --muted: #8b94a7;
-  --accent: #4c8dff;
-  --error: #ff6b6b;
-  --success: #3ddc97;
+  --bg: #0a0e15; --bg-accent: #0f1319; --panel: #131820; --line: #1e2635; --line-alt: #252d3d;
+  --text: #e8ecf5; --text-secondary: #c5cee0; --muted: #7e8899;
+  --tensor: #5a9eff; --weights: #ffb055; --op: #48dba0; --concept: #c492ff; --sel: #ffffff;
+  --error: #ff7a7a; --success: var(--op);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.3); --shadow-md: 0 8px 24px rgba(0,0,0,.4);
 }
 
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 system-ui, "Segoe UI", Roboto, sans-serif; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 'IBM Plex Sans', sans-serif; overflow-x: hidden; }
+body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background:
+  radial-gradient(ellipse 1200px 600px at 20% 50%, rgba(90,158,255,.08) 0%, transparent 40%),
+  radial-gradient(ellipse 1000px 500px at 80% 20%, rgba(196,146,255,.06) 0%, transparent 40%);
+  pointer-events: none; z-index: 0; animation: drift 20s ease-in-out infinite; }
+@keyframes drift { 0%,100% { opacity: 1; } 50% { opacity: .8; } }
 
 header {
   background: var(--panel);
@@ -30,58 +32,77 @@ header {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
+  position: relative;
+  z-index: 10;
 }
 
 header h1 {
   margin: 0;
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 26px;
+  font-weight: 700;
+  font-family: 'Syne', sans-serif;
+  letter-spacing: -.5px;
 }
 
 nav.links {
   display: flex;
-  gap: 12px;
+  gap: 10px;
 }
 
 nav.links a {
   display: inline-block;
-  padding: 8px 16px;
-  background: #20263a;
+  padding: 7px 14px;
+  background: var(--line-alt);
   border: 1px solid var(--line);
   color: var(--text);
   text-decoration: none;
   border-radius: 6px;
-  transition: all 0.2s;
+  transition: all .2s ease;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 nav.links a:hover {
-  background: #2a3350;
-  border-color: var(--accent);
+  background: var(--tensor);
+  color: #000;
+  border-color: var(--tensor);
 }
 
 nav.links a.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--tensor);
+  border-color: var(--tensor);
+  color: #000;
 }
 
 main {
   max-width: 1000px;
   margin: 0 auto;
-  padding: 40px 20px;
+  padding: 50px 20px;
+  position: relative;
+  z-index: 1;
 }
 
 .qa-grid {
   display: grid;
-  gap: 24px;
+  gap: 26px;
 }
 
 .qa-item {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-left: 4px solid var(--accent);
-  border-radius: 8px;
-  padding: 24px;
+  border-left: 4px solid var(--tensor);
+  border-radius: 10px;
+  padding: 26px;
+  transition: all .3s ease;
+  animation: slideUp .4s ease-out;
+}
+
+@keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+.qa-item:hover {
+  border-color: var(--tensor);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .qa-item.misconception {
@@ -89,8 +110,8 @@ main {
 }
 
 .qa-item.misconception .tag {
-  background: rgba(255, 107, 107, 0.2);
-  color: #ff9999;
+  background: rgba(255, 122, 122, .15);
+  color: #ff9a9a;
 }
 
 .qa-item.clarification {
@@ -98,17 +119,17 @@ main {
 }
 
 .qa-item.clarification .tag {
-  background: rgba(61, 220, 151, 0.2);
-  color: #61e8b8;
+  background: rgba(72, 219, 160, .15);
+  color: #6dffce;
 }
 
 .qa-item.definition {
-  border-left-color: var(--accent);
+  border-left-color: var(--tensor);
 }
 
 .qa-item.definition .tag {
-  background: rgba(76, 141, 255, 0.2);
-  color: #6ba3ff;
+  background: rgba(90, 158, 255, .15);
+  color: #90c8ff;
 }
 
 .qa-head {
@@ -120,64 +141,72 @@ main {
 
 .tag {
   display: inline-block;
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   white-space: nowrap;
+  font-family: 'Syne', sans-serif;
 }
 
 .qa-item h3 {
   margin: 0;
   font-size: 18px;
-  color: #fff;
+  color: var(--text);
   flex: 1;
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
 }
 
 .qa-question {
-  color: var(--accent);
+  color: var(--tensor);
   font-weight: 600;
-  margin: 16px 0 12px 0;
-  font-size: 15px;
+  margin: 18px 0 10px 0;
+  font-size: 14px;
+  font-family: 'Syne', sans-serif;
 }
 
 .qa-answer {
-  color: var(--text);
-  margin: 0 0 12px 0;
+  color: var(--text-secondary);
+  margin: 0 0 14px 0;
   line-height: 1.7;
 }
 
 .qa-key {
-  background: rgba(76, 141, 255, 0.1);
-  border-left: 2px solid var(--accent);
-  padding: 12px;
-  margin: 12px 0;
-  border-radius: 4px;
-  font-size: 14px;
+  background: rgba(90, 158, 255, .08);
+  border-left: 3px solid var(--tensor);
+  padding: 14px 16px;
+  margin: 14px 0;
+  border-radius: 6px;
+  font-size: 13px;
 }
 
 .qa-key strong {
-  color: #fff;
+  color: var(--text);
+  font-weight: 600;
 }
 
 code {
-  background: #20263a;
+  background: var(--line-alt);
   padding: 2px 6px;
-  border-radius: 4px;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 13px;
-  color: #4c8dff;
+  border-radius: 5px;
+  border: 1px solid rgba(90,158,255,.2);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: #a8d8ff;
 }
 
 .category-title {
   font-size: 24px;
-  font-weight: 600;
-  margin: 40px 0 20px 0;
-  padding-top: 20px;
+  font-weight: 700;
+  margin: 48px 0 24px 0;
+  padding-top: 24px;
   border-top: 2px solid var(--line);
-  color: #fff;
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  letter-spacing: -.3px;
 }
 
 .category-title:first-child {
@@ -187,11 +216,12 @@ code {
 
 footer {
   border-top: 1px solid var(--line);
-  margin-top: 60px;
-  padding-top: 20px;
+  margin-top: 80px;
+  padding-top: 30px;
+  padding-bottom: 20px;
   text-align: center;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 </style>
 </head>
