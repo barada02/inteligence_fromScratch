@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q&A — LLM from Scratch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0f1115;
+  --panel: #161a22;
+  --line: #2a3140;
+  --text: #e6e9ef;
+  --muted: #8b94a7;
+  --accent: #4c8dff;
+  --error: #ff6b6b;
+  --success: #3ddc97;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 system-ui, "Segoe UI", Roboto, sans-serif; }
+
+header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+nav.links {
+  display: flex;
+  gap: 12px;
+}
+
+nav.links a {
+  display: inline-block;
+  padding: 8px 16px;
+  background: #20263a;
+  border: 1px solid var(--line);
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+nav.links a:hover {
+  background: #2a3350;
+  border-color: var(--accent);
+}
+
+nav.links a.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+main {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.qa-grid {
+  display: grid;
+  gap: 24px;
+}
+
+.qa-item {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.qa-item.misconception {
+  border-left-color: var(--error);
+}
+
+.qa-item.misconception .tag {
+  background: rgba(255, 107, 107, 0.2);
+  color: #ff9999;
+}
+
+.qa-item.clarification {
+  border-left-color: var(--success);
+}
+
+.qa-item.clarification .tag {
+  background: rgba(61, 220, 151, 0.2);
+  color: #61e8b8;
+}
+
+.qa-item.definition {
+  border-left-color: var(--accent);
+}
+
+.qa-item.definition .tag {
+  background: rgba(76, 141, 255, 0.2);
+  color: #6ba3ff;
+}
+
+.qa-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.qa-item h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #fff;
+  flex: 1;
+}
+
+.qa-question {
+  color: var(--accent);
+  font-weight: 600;
+  margin: 16px 0 12px 0;
+  font-size: 15px;
+}
+
+.qa-answer {
+  color: var(--text);
+  margin: 0 0 12px 0;
+  line-height: 1.7;
+}
+
+.qa-key {
+  background: rgba(76, 141, 255, 0.1);
+  border-left: 2px solid var(--accent);
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.qa-key strong {
+  color: #fff;
+}
+
+code {
+  background: #20263a;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  color: #4c8dff;
+}
+
+.category-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 40px 0 20px 0;
+  padding-top: 20px;
+  border-top: 2px solid var(--line);
+  color: #fff;
+}
+
+.category-title:first-child {
+  margin-top: 0;
+  border-top: none;
+}
+
+footer {
+  border-top: 1px solid var(--line);
+  margin-top: 60px;
+  padding-top: 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>❓ Q&A & Misconceptions — LLM Learning</h1>
+  <nav class="links">
+    <a href="index.html">↩ Canvas</a>
+    <a href="stories.html">Stories</a>
+    <a href="qa.html" class="active">Q&A</a>
+  </nav>
+</header>
+
+<main>
+  <div class="qa-grid">
+
+    <h2 class="category-title">🧠 Misconceptions Corrected</h2>
+
+    <!-- Misconception 1 -->
+    <div class="qa-item misconception">
+      <div class="qa-head">
+        <h3>Is the tokenizer a word → number dictionary?</h3>
+        <span class="tag">❌ Misconception</span>
+      </div>
+      <div class="qa-question">What I thought:</div>
+      <div class="qa-answer">
+        The tokenizer is like a dictionary: "The" → 464, "cat" → 3290, etc.
+      </div>
+      <div class="qa-question">The correction:</div>
+      <div class="qa-answer">
+        The dictionary is the <b>output</b>, not the input. The real work is: text → bytes → apply learned merges in rank order → lookup.
+      </div>
+      <div class="qa-key">
+        <strong>Key:</strong> Byte-Pair Encoding (BPE) is a learned compression algorithm. The "dictionary" emerges from counting and merging the most frequent byte pairs. Different models have different vocabularies because they trained on different data.
+      </div>
+    </div>
+
+    <!-- Misconception 2 -->
+    <div class="qa-item misconception">
+      <div class="qa-head">
+        <h3>Is the token vector provided by the tokenizer?</h3>
+        <span class="tag">❌ Misconception</span>
+      </div>
+      <div class="qa-question">What I thought:</div>
+      <div class="qa-answer">
+        The tokenizer outputs both an ID and a vector (like a 768-dimensional embedding).
+      </div>
+      <div class="qa-question">The correction:</div>
+      <div class="qa-answer">
+        The tokenizer outputs <b>only an ID</b> (an integer). The vector is produced by the <b>model</b> via a learned lookup table <code>E[id]</code>.
+      </div>
+      <div class="qa-key">
+        <strong>Key:</strong> The tokenizer is frozen before training. It's a fixed compression scheme. The model learns what each token means by training the embedding table <code>E</code>, which maps token IDs to vectors.
+      </div>
+    </div>
+
+    <!-- Misconception 3 -->
+    <div class="qa-item misconception">
+      <div class="qa-head">
+        <h3>Is position encoding optional?</h3>
+        <span class="tag">❌ Misconception</span>
+      </div>
+      <div class="qa-question">What I thought:</div>
+      <div class="qa-answer">
+        Maybe the model can figure out order from context alone. Position might be extra.
+      </div>
+      <div class="qa-question">The correction:</div>
+      <div class="qa-answer">
+        Attention is <b>permutation-equivariant</b>: shuffle the input tokens and outputs shuffle identically. Without position, "dog bites man" = "man bites dog". Position encoding is non-negotiable.
+      </div>
+      <div class="qa-key">
+        <strong>Key:</strong> Every modern LLM injects position info. The scheme varies (learned table, sinusoids, RoPE), but every model does it somewhere.
+      </div>
+    </div>
+
+    <h2 class="category-title">💡 Key Definitions & Clarifications</h2>
+
+    <!-- Clarification 1 -->
+    <div class="qa-item clarification">
+      <div class="qa-head">
+        <h3>What does "frozen" mean?</h3>
+        <span class="tag">✓ Clarification</span>
+      </div>
+      <div class="qa-answer">
+        <b>Frozen weights</b> = parameters that don't change during training. The tokenizer is frozen (locked before training starts). The embedding table is <b>not</b> frozen (it's learned during training).
+      </div>
+      <div class="qa-key">
+        <strong>Key:</strong> If you change the tokenizer after training starts, you must retrain the embedding table, because the rows of <code>E</code> are indexed by token IDs.
+      </div>
+    </div>
+
+    <!-- Clarification 2 -->
+    <div class="qa-item clarification">
+      <div class="qa-head">
+        <h3>Why is the residual stream a matrix, not a vector?</h3>
+        <span class="tag">✓ Clarification</span>
+      </div>
+      <div class="qa-answer">
+        The residual stream has shape <code>(T, d_model)</code> where <code>T</code> is sequence length. There's one <code>d_model</code>-dimensional vector <b>per token position</b>. Attention routes info between positions; MLP works per-position independently.
+      </div>
+      <div class="qa-key">
+        <strong>Key:</strong> This is why the model scales: you can have 10 tokens or 2048 tokens flowing through the same block structure. The shape is flexible in the sequence dimension.
+      </div>
+    </div>
+
+    <!-- Clarification 3 -->
+    <div class="qa-item clarification">
+      <div class="qa-head">
+        <h3>Why do residual connections prevent vanishing gradients?</h3>
+        <span class="tag">✓ Clarification</span>
+      </div>
+      <div class="qa-answer">
+        Without residuals: gradients multiply through 80 layers: <code>g ≈ 0.9^80 ≈ 10^-4</code> (dead).
+        With residuals: gradients add through a direct path: <code>g ≈ 1 + small terms</code> (alive).
+      </div>
+      <div class="qa-key">
+        <strong>Key:</strong> The identity shortcut (the <code>+</code> in <code>x = x + f(x)</code>) creates a highway for gradients. Early layers can receive strong signals even if intermediate layers are noisy.
+      </div>
+    </div>
+
+    <!-- Definition 1 -->
+    <div class="qa-item definition">
+      <div class="qa-head">
+        <h3>What's the difference between a tensor and a weight?</h3>
+        <span class="tag">ℹ Definition</span>
+      </div>
+      <div class="qa-answer">
+        <b>Tensor:</b> data flowing through the model (token IDs, embeddings, attention scores). <b>Weight:</b> learned parameters (matrices that get updated during training). In code: tensors are temporary; weights are persistent.
+      </div>
+      <div class="qa-key">
+        <strong>Key:</strong> During inference, weights never change. You compute forward pass (tensors flow), sample a token, feed it back. Weights stay frozen.
+      </div>
+    </div>
+
+    <!-- Definition 2 -->
+    <div class="qa-item definition">
+      <div class="qa-head">
+        <h3>What's LayerNorm and why is it needed?</h3>
+        <span class="tag">ℹ Definition</span>
+      </div>
+      <div class="qa-answer">
+        <b>LayerNorm:</b> normalizes vectors to have mean=0 and std=1. Applied before attention and MLP (before → instead of after ↪ in transformers). Why: keeps values in sane range so downstream layers see stable scale. Without it, early layers' outputs can grow unbounded, saturating later layers.
+      </div>
+      <div class="qa-key">
+        <strong>Key:</strong> LN is not a learner of features; it's a stabilizer. It keeps the residual stream from exploding or vanishing.
+      </div>
+    </div>
+
+    <!-- Definition 3 -->
+    <div class="qa-item definition">
+      <div class="qa-head">
+        <h3>What's the difference between attention heads?</h3>
+        <span class="tag">ℹ Definition</span>
+      </div>
+      <div class="qa-answer">
+        Multi-head attention splits the <code>d_model</code> dimensions into <code>num_heads</code> separate "heads", each computing attention independently on a smaller dimension space, then concatenating. GPT-2 has 12 heads of dimension 64 (12 × 64 = 768).
+      </div>
+      <div class="qa-key">
+        <strong>Key:</strong> Heads allow parallelism and let the model learn multiple types of interactions (some heads look for syntax, others for semantics, etc.). But they're not "semantic roles"—the model learns what each head does.
+      </div>
+    </div>
+
+    <h2 class="category-title">❔ Questions Asked During Learning</h2>
+
+    <!-- Q1 -->
+    <div class="qa-item">
+      <div class="qa-head">
+        <h3>Can the embedding table have the same vector for two different tokens?</h3>
+        <span class="tag">Question</span>
+      </div>
+      <div class="qa-answer">
+        <b>Technically yes,</b> but in practice no. During training, if two tokens always appear in the same contexts, their gradients would be identical, so their rows would update identically. Over many steps they'd drift to the same vector. But the model would then lose information—it couldn't distinguish them. The loss function would punish this (can't predict well if you can't tell tokens apart), so training pushes tokens toward different vectors.
+      </div>
+    </div>
+
+    <!-- Q2 -->
+    <div class="qa-item">
+      <div class="qa-head">
+        <h3>Why does attention use <code>sqrt(d_head)</code> instead of just dividing by <code>d_head</code>?</h3>
+        <span class="tag">Question</span>
+      </div>
+      <div class="qa-answer">
+        If <code>Q</code> and <code>K</code> are both drawn from Gaussian distributions with variance 1, then their dot product has variance <code>d_head</code>. To keep the variance of the dot product at 1 (for stable softmax), you divide by <code>sqrt(d_head)</code>. This prevents the logits from getting too large or too small, keeping softmax well-behaved.
+      </div>
+    </div>
+
+    <!-- Q3 -->
+    <div class="qa-item">
+      <div class="qa-head">
+        <h3>Why is MLP 8·d² parameters vs. Attention's 4·d²?</h3>
+        <span class="tag">Question</span>
+      </div>
+      <div class="qa-answer">
+        Attention has 4 projections: Q, K, V, and Output (each <code>d_model → d_model</code>) = <code>4·d²</code>.
+        MLP has: up-projection (<code>d_model → 4·d_model</code>) and down-projection (<code>4·d_model → d_model</code>) = <code>d·4d + 4d·d = 8·d²</code>.
+        MLP is bigger because of the <code>4×</code> expansion (standard in transformers).
+      </div>
+    </div>
+
+    <!-- Q4 -->
+    <div class="qa-item">
+      <div class="qa-head">
+        <h3>Why is a nonlinearity (ReLU/GELU) needed in MLP?</h3>
+        <span class="tag">Question</span>
+      </div>
+      <div class="qa-answer">
+        Without it, the two linear projections would collapse into one: <code>(x·W_up)·W_down = x·(W_up·W_down)</code> — just a single linear transformation. The nonlinearity breaks this, letting the network learn non-linear functions. The MLP becomes a learned, learnable nonlinear feature processor.
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<footer>
+  <p>This page tracks corrections, clarifications, and key questions from our discussions. Updated as we learn.</p>
+</footer>
+
+</body>
+</html>

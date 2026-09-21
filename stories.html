@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stories — LLM from Scratch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0f1115;
+  --panel: #161a22;
+  --line: #2a3140;
+  --text: #e6e9ef;
+  --muted: #8b94a7;
+  --accent: #4c8dff;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 system-ui, "Segoe UI", Roboto, sans-serif; }
+
+header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+nav.links {
+  display: flex;
+  gap: 12px;
+}
+
+nav.links a {
+  display: inline-block;
+  padding: 8px 16px;
+  background: #20263a;
+  border: 1px solid var(--line);
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+nav.links a:hover {
+  background: #2a3350;
+  border-color: var(--accent);
+}
+
+nav.links a.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.stories-grid {
+  display: grid;
+  gap: 30px;
+}
+
+.story-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 30px;
+  transition: all 0.2s;
+}
+
+.story-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(76, 141, 255, 0.1);
+}
+
+.story-card h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  color: #fff;
+}
+
+.story-card .subtitle {
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.story-card .md {
+  line-height: 1.8;
+}
+
+.md h3 {
+  font-size: 18px;
+  margin: 24px 0 12px 0;
+  color: #fff;
+  font-weight: 600;
+}
+
+.md h4 {
+  font-size: 15px;
+  margin: 16px 0 8px 0;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.md p {
+  margin: 12px 0;
+  color: var(--text);
+}
+
+.md ul, .md ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.md li {
+  margin: 6px 0;
+}
+
+.md code {
+  background: #20263a;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  color: #4c8dff;
+}
+
+.md pre {
+  background: #0b0d12;
+  border: 1px solid var(--line);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.md pre code {
+  background: none;
+  padding: 0;
+  color: #4c8dff;
+}
+
+.md b {
+  color: #fff;
+  font-weight: 600;
+}
+
+.md i {
+  font-style: italic;
+  color: var(--muted);
+}
+
+.md table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+.md th {
+  background: #20263a;
+  padding: 8px;
+  text-align: left;
+  font-weight: 600;
+  border: 1px solid var(--line);
+}
+
+.md td {
+  padding: 8px;
+  border: 1px solid var(--line);
+}
+
+.md tr:nth-child(even) {
+  background: rgba(32, 38, 58, 0.5);
+}
+
+.toc {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 40px;
+  position: sticky;
+  top: 20px;
+}
+
+.toc h3 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  color: #fff;
+}
+
+.toc ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.toc li {
+  margin: 8px 0;
+}
+
+.toc a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.toc a:hover {
+  color: #fff;
+}
+
+footer {
+  border-top: 1px solid var(--line);
+  margin-top: 60px;
+  padding-top: 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📖 Stories — Learning LLMs from Scratch</h1>
+  <nav class="links">
+    <a href="index.html">↩ Canvas</a>
+    <a href="stories.html" class="active">Stories</a>
+    <a href="qa.html">Q&A</a>
+  </nav>
+</header>
+
+<main>
+  <div class="toc">
+    <h3>📑 Jump to Topic</h3>
+    <ul>
+      <li><a href="#embedding">Token Embedding</a></li>
+      <li><a href="#positional">Positional Encoding</a></li>
+      <li><a href="#residual">Residual Streams</a></li>
+    </ul>
+  </div>
+
+  <div class="stories-grid">
+
+    <!-- Embedding Story -->
+    <div class="story-card" id="embedding">
+      <h2>Token Embedding — Turning IDs Into Vectors</h2>
+      <div class="subtitle">Why lookup tables and how they learn meaning</div>
+      <div class="md">
+
+<h3>The Problem (Simple English)</h3>
+
+<p>The tokenizer gave us numbers. But numbers are just labels. The number 3290 tells you nothing about what "cat" means. The model can't work with bare integers — it needs <b>vectors</b> that encode meaning.</p>
+
+<p>So we need to convert token IDs into vectors that capture information. How? With a lookup table that the model <b>learns during training</b>.</p>
+
+<h3>The Analogy: A Dictionary of Personalities</h3>
+
+<p>Imagine you run a restaurant and want to understand your customers. You give each person a unique ID (customer 47, customer 81, etc.), but IDs don't tell you anything.</p>
+
+<p>So you create a "personality profile" for each customer:</p>
+
+<pre><code>customer 47: [friendly=0.8, quiet=0.2, adventurous=0.6, ...]
+customer 81: [friendly=0.3, quiet=0.9, adventurous=0.1, ...]</code></pre>
+
+<p>These profiles start as random guesses. But over time, as you serve customers and learn what they like, the profiles update. Customers with similar tastes end up with similar profiles.</p>
+
+<p><b>That's the embedding.</b> Each token gets a vector (personality profile). The vector starts random. Over training, tokens that appear in similar contexts drift toward each other.</p>
+
+<h3>The Math</h3>
+
+<pre><code>E : (vocab × d_model)     — the embedding table, shape 50257 × 768 for GPT-2
+x_t = E[id_t]             — lookup: pull row id_t from table E
+X = [x_1; x_2; …; x_T]    — stack all T token vectors → (T × d_model)</code></pre>
+
+<h4>Why a lookup table?</h4>
+
+<p>Token IDs are <b>arbitrary</b> labels from BPE. There's no mathematical relationship between the number 3290 and the concept "cat". A lookup table is the most general way to map an arbitrary label to a vector — every ID gets its own row of free parameters.</p>
+
+<p>Compare: a lookup is <b>maximally flexible</b>. A formula like "x = 2·id" would tie all tokens to a 1D line; a table lets each token be anywhere in d_model dimensional space.</p>
+
+<h4>What happens during training</h4>
+
+<ul>
+<li>The loss function measures: "did you predict the next token correctly?"</li>
+<li>Gradients flow back through the blocks, then into the rows of E</li>
+<li>Only rows for tokens that appear in this batch get updated</li>
+<li>But over millions of training steps, patterns emerge:
+  <ul>
+  <li>tokens in similar contexts get similar gradients</li>
+  <li>their rows drift together (cos-similarity increases)</li>
+  <li>the model learns "king − man + woman ≈ queen" as a <i>side-effect</i> of compression</li>
+  </ul>
+</li>
+</ul>
+
+<p>No rule says "make cat close to dog". The model discovers it because shared vectors save parameters and lower loss.</p>
+
+<h4>Shape contract</h4>
+
+<ul>
+<li>Input: one token ID (a scalar, 0–50256)</li>
+<li>One-hot: a vector of length vocab with a 1 at the ID, 0s elsewhere
+  <pre><code>onehot(3290) = [0, 0, …, 0, 1, 0, …, 0]  (length 50257)</code></pre>
+</li>
+<li>Multiply: <code>onehot · E</code> is a (1 × vocab) × (vocab × d_model) → (1 × d_model)
+  <ul>
+  <li>All terms are 0 except the row at index 3290, which gets copied out</li>
+  </ul>
+</li>
+<li>Result: <code>x = [0.5, -0.2, 0.8, …]</code> (length 768)</li>
+</ul>
+
+<p>In code, nobody builds the one-hot. Instead: <code>E[id]</code> (direct indexing). Same math, faster.</p>
+
+<h4>Example: GPT-2 small</h4>
+
+<ul>
+<li>vocab = 50257 (every unique token)</li>
+<li>d_model = 768 (hidden size)</li>
+<li>E has 50257 × 768 ≈ 38M numbers</li>
+<li><b>Learned parameters</b>: yes, all of them</li>
+</ul>
+
+<h4>Sizes in other models</h4>
+
+<ul>
+<li>Llama-3 8B: vocab = 128256, d_model = 4096 → ≈ 525M params (≈6.5% of 8B)</li>
+<li>GPT-3 175B: similar ratio</li>
+</ul>
+
+<p>Embedding is a large table, but small compared to the blocks (which dominate).</p>
+
+      </div>
+    </div>
+
+    <!-- Positional Story -->
+    <div class="story-card" id="positional">
+      <h2>Positional Encoding — Telling the Model "Where"</h2>
+      <div class="subtitle">Three schemes to inject position: learned, sinusoidal, and RoPE</div>
+      <div class="md">
+
+<h3>The Problem (Simple English)</h3>
+
+<p>Here's a puzzle: <b>attention doesn't care about order</b>.</p>
+
+<p>Attention computes how similar token A is to token B, and mixes them based on that similarity. But this operation is <b>permutation-equivariant</b>: if you shuffle the input tokens, the outputs shuffle identically.</p>
+
+<p><b>Result:</b> the model can't tell the difference between:</p>
+<ul>
+<li>"the dog bit the man"</li>
+<li>"man the the dog bit"</li>
+</ul>
+
+<p>Both have the same tokens. Without position, they're indistinguishable.</p>
+
+<p><b>Solution:</b> inject position somehow. Before tokens go through attention, we add a signal that says "you are at position 0", "you are at position 5", etc.</p>
+
+<h3>The Analogy: Seating Around a Table</h3>
+
+<p>Imagine 10 people in a coffee shop who can talk to anyone. But their conversation depends on where they sit:</p>
+<ul>
+<li>Person at seat 0: near the door</li>
+<li>Person at seat 9: by the window</li>
+<li>Two people 3 seats apart have different dynamics than two people 9 seats apart</li>
+</ul>
+
+<p>Before they start talking, you whisper to each person: <i>"You're at seat N."</i> It becomes part of their identity.</p>
+
+<p><b>Similarly,</b> before tokens go through attention:</p>
+
+<pre><code>Token vector:    [0.5, -0.2, 0.8, …]      (from embedding)
+Position signal: [0.1,  0.3, 0.2, …]      (depends on position index)
+                 ──────────────────
+Combined:        [0.6,  0.1, 1.0, …]      (now it knows both what AND where)</code></pre>
+
+<p>Each token now carries two pieces of info: its identity and its location.</p>
+
+<h3>The Math: Three Schemes</h3>
+
+<h4>Scheme 1: Learned Position Table (GPT-2)</h4>
+
+<p>Just like token embedding <code>E[id]</code>, create a position table <code>P[position]</code>.</p>
+
+<pre><code>P : (T_max × d_model)    — another lookup table, indexed by position
+x_t = E[id_t] + P[t]     — coordinate-wise addition</code></pre>
+
+<p><b>Example (GPT-2 small):</b></p>
+<ul>
+<li>T_max = 1024 (max sequence length)</li>
+<li>d_model = 768</li>
+<li>P has 1024 × 768 ≈ 0.8M parameters (learned)</li>
+</ul>
+
+<p><b>Pros:</b></p>
+<ul>
+<li>Simple: just add</li>
+<li>Learned exactly what position signals matter</li>
+</ul>
+
+<p><b>Cons:</b></p>
+<ul>
+<li>Hard limit: can't see tokens beyond T_max (GPT-2 max context = 1024)</li>
+<li>Must learn that "position 7 is near position 8" separately for each pair</li>
+</ul>
+
+<h4>Scheme 2: Sinusoidal (Fixed, Original Transformer)</h4>
+
+<p>Don't learn P. Instead, <b>compute</b> it using math:</p>
+
+<pre><code>PE[t, 2j]   = sin( t / 10000^(2j/d_model) )    — even dimensions are sine
+PE[t, 2j+1] = cos( t / 10000^(2j/d_model) )    — odd dimensions are cosine</code></pre>
+
+<p>where:</p>
+<ul>
+<li>t = position (0, 1, 2, …, T-1)</li>
+<li>j = dimension index (0, 1, 2, …, 384) for d_model = 768</li>
+</ul>
+
+<p><b>What this does:</b></p>
+
+<p>Different dimensions encode different frequencies:</p>
+<ul>
+<li>Dimensions 0, 1: fast oscillation (angle updates every step)</li>
+<li>Dimensions 766, 767: slow oscillation (angle barely changes)</li>
+</ul>
+
+<p>Together they form a unique "timestamp" per position — like reading hours, minutes, seconds on a clock with many hands.</p>
+
+<p><b>Example:</b></p>
+<pre><code>PE[0] = [sin(0/1), cos(0/1), sin(0/10000^2/768), cos(…), …]
+      = [0, 1, 0, 1, 0, 1, …]
+
+PE[1] = [sin(1/1), cos(1/1), sin(1/10000^2/768), …]
+      ≈ [0.841, 0.540, 0.00013, …]
+
+PE[100] = [sin(100/1), cos(100/1), …]
+        ≈ [-0.506, -0.861, …]</code></pre>
+
+<p><b>Key insight:</b> position 100 and position 101 differ by the same amount no matter what dimension you look at — the relative distance is encoded consistently.</p>
+
+<p><b>Pros:</b></p>
+<ul>
+<li>No learned parameters (it's just math)</li>
+<li>Unbounded: works for any sequence length</li>
+<li>Natural notion of relative distance (PE[t+k] is a fixed linear transformation of PE[t])</li>
+</ul>
+
+<p><b>Cons:</b></p>
+<ul>
+<li>Fixed forever (can't adapt to data)</li>
+</ul>
+
+<h4>Scheme 3: RoPE (Rotary Position Embedding, Modern Standard)</h4>
+
+<p>Don't add position to x. Instead, <b>rotate</b> the query and key vectors <b>inside attention</b>.</p>
+
+<pre><code>θ = t · (1 / 10000^(2j/d_model))    — same frequency formula
+
+q'_m = R(m · θ) q                   — rotate Q vector by angle m·θ
+k'_n = R(n · θ) k                   — rotate K vector by angle n·θ</code></pre>
+
+<p>When you compute the attention score:</p>
+
+<pre><code>q'_m · k'_n = q^T R((m−n)θ) k      ← depends only on (m−n), the relative distance!</code></pre>
+
+<p><b>What this means:</b></p>
+
+<ul>
+<li>Absolute position doesn't matter</li>
+<li>Only relative distance m − n appears in the score</li>
+<li>Language naturally cares about "how far apart" not "absolute index"
+  <ul>
+  <li>A verb attends to its subject 2 tokens back, whether that's position 0 or position 900</li>
+  </ul>
+</li>
+</ul>
+
+<p><b>Pros:</b></p>
+<ul>
+<li>No T_max limit</li>
+<li>Relative distance baked in from physics</li>
+<li>Better length extrapolation (model trained on short sequences can handle long ones)</li>
+<li>What Llama, Mistral, modern LLMs use</li>
+</ul>
+
+<p><b>Cons:</b></p>
+<ul>
+<li>More complex (2D rotations in embedding space)</li>
+<li>Requires applying the rotation inside every attention layer</li>
+</ul>
+
+<h3>Comparison Table</h3>
+
+<table>
+<tr>
+<th>Aspect</th>
+<th>Learned</th>
+<th>Sinusoidal</th>
+<th>RoPE</th>
+</tr>
+<tr>
+<td>Parameters</td>
+<td>Yes (1B for 1k ctx)</td>
+<td>No</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Max length</td>
+<td>Hard limit (T_max)</td>
+<td>Unbounded</td>
+<td>Unbounded</td>
+</tr>
+<tr>
+<td>Relative distance</td>
+<td>Learned implicitly</td>
+<td>Natural (sin/cos shift)</td>
+<td>Natural (rotation angle)</td>
+</tr>
+<tr>
+<td>Used by</td>
+<td>GPT-2, older</td>
+<td>Original Transformer</td>
+<td>Llama, Mistral, most modern</td>
+</tr>
+<tr>
+<td>Extrapolation</td>
+<td>Poor</td>
+<td>Good</td>
+<td>Excellent</td>
+</tr>
+</table>
+
+<h3>When Position is Applied</h3>
+
+<p><b>For learned and sinusoidal:</b> once, after embedding, before block 1</p>
+<pre><code>x = E[id] + P[t]
+  → Block 1 → Block 2 → … → Block N</code></pre>
+
+<p><b>For RoPE:</b> never added to x. Instead applied inside the attention computation in <b>every</b> block:</p>
+<pre><code>x = E[id]  (no position here)
+  → Block 1: attention rotates q, k by position angle
+  → Block 2: attention rotates q, k by position angle (independently)
+  → …</code></pre>
+
+<h3>Why This Matters</h3>
+
+<p>Without position, the model sees text as a <b>set</b> of tokens, not a <b>sequence</b>. Adding position breaks the symmetry and lets attention know where each token stands relative to others. This is non-negotiable — without it, word order is meaningless.</p>
+
+      </div>
+    </div>
+
+    <!-- Residual Streams Story -->
+    <div class="story-card" id="residual">
+      <h2>Residual Streams — The Shared Whiteboard</h2>
+      <div class="subtitle">Why 80 layers work: skip connections, gradient flow, and deep stacking</div>
+      <div class="md">
+
+<h3>The Core Idea (Simple English)</h3>
+
+<p>An LLM is a stack of <b>80 identical blocks</b>, each doing the same two things:</p>
+<ol>
+<li><b>Attention</b> — tokens exchange information</li>
+<li><b>MLP</b> — each token thinks independently</li>
+</ol>
+
+<p>What makes this work is the <b>residual stream</b>: a shared vector that flows left-to-right through all 80 blocks, and each block <b>adds</b> to it rather than replaces it.</p>
+
+<p>Without residual streams, you couldn't stack 80 layers. Gradients would vanish. Information would be lost. Deep learning would be impossible.</p>
+
+<h3>The Analogy: A Relay Race vs. a Workbench</h3>
+
+<p><b>Bad way (no residuals):</b></p>
+<pre><code>Runner 1 picks up the baton and runs 100m
+Runner 2 takes it and runs 100m from the new starting point
+Runner 3 takes it and runs 100m again
+…
+If Runner 1 goes the wrong direction, everyone after is lost.
+Gradient signal (like a rope pulled backward) snaps after a few runners.</code></pre>
+
+<p><b>Good way (residual):</b></p>
+<pre><code>A whiteboard in the middle. People stand at desks around it.
+
+Person 1 reads the board, writes a note: "also consider X"
+Person 2 reads the board (including Person 1's note), writes: "and also Y"
+Person 3 reads everything, writes: "and also Z"
+…
+Person 80 reads all 80 notes and makes the final decision.
+
+At every step, the *entire history* is visible. Everyone can contribute a small delta.
+Feedback (gradients) can reach Person 1 directly — no long chain to break.</code></pre>
+
+<p><b>That's the residual stream.</b> The board is the shared (T, d_model) matrix. Each block writes to it, never erases.</p>
+
+<h3>The Math</h3>
+
+<h4>The Residual Update Formula</h4>
+
+<p>In a standard deep network (no residuals):</p>
+<pre><code>x = f_1(x)
+x = f_2(x)
+x = f_3(x)
+…
+x = f_80(x)</code></pre>
+
+<p>Each function replaces the previous value. Gradients multiply and decay exponentially.</p>
+
+<p>With residuals:</p>
+<pre><code>x = x + f_1(x)      ← attention + MLP of block 1
+x = x + f_2(x)      ← attention + MLP of block 2
+…
+x = x + f_80(x)     ← attention + MLP of block 80</code></pre>
+
+<p>Each function adds a <b>delta</b> back to the stream. Gradients add up instead of multiplying.</p>
+
+<h4>Shape Contract</h4>
+
+<p>This is critical. Every block must preserve shape:</p>
+
+<p><b>Input to block i:</b></p>
+<pre><code>x : (T × d_model)
+where T = sequence length, d_model = 768 for GPT-2</code></pre>
+
+<p><b>Inside the block:</b></p>
+<pre><code>LayerNorm(x)  : (T × d_model) → (T × d_model)  [just normalizes]
+Attention(…)  : (T × d_model) → (T × d_model)  [mixes across positions]
+x + Attention(…) : (T × d_model)                [add back]
+
+LayerNorm(x)  : (T × d_model) → (T × d_model)
+MLP(…)        : (T × d_model) → (T × d_model)  [per-position thinking]
+x + MLP(…)    : (T × d_model)                   [add back]</code></pre>
+
+<p><b>Output of block i:</b></p>
+<pre><code>x : (T × d_model)  [same shape as input]</code></pre>
+
+<p>Because every block preserves shape, you can chain them infinitely. This is why transformers scale: 80 blocks look like 1 block from the outside (same (T, d_model) in and out).</p>
+
+<h4>The Residual Stream is NOT One Vector</h4>
+
+<p><b>Critical:</b> the residual stream is a <b>matrix with one vector per token</b>.</p>
+
+<pre><code>Stream shape: (T, d_model) = (10 tokens, 768 dimensions)
+
+Position 0: [0.5,  -0.2,  0.8,  …]    ← token 0's vector
+Position 1: [0.1,   0.3,  0.2,  …]    ← token 1's vector
+Position 2: [-0.4,  0.6, -0.1,  …]    ← token 2's vector
+…
+Position 9: [0.4,  -0.1,  0.2,  …]    ← token 9's vector</code></pre>
+
+<ul>
+<li><b>Attention</b> routes information between positions (position 5 can read from positions 0, 2, 5, etc.)</li>
+<li><b>MLP</b> refines each position independently (never looks at neighbors)</li>
+</ul>
+
+<p>Both add their outputs back to update all T vectors.</p>
+
+<h3>Why Gradients Don't Vanish</h3>
+
+<h4>The Problem Without Residuals</h4>
+
+<p>When you chain 80 functions:</p>
+<pre><code>f_80(f_79(…f_1(x)…))
+
+Backward pass (gradients):
+∂loss/∂x_0 = ∂loss/∂x_80 · ∂x_80/∂x_79 · … · ∂x_1/∂x_0
+           = product of 80 derivatives
+
+If each derivative ≈ 0.9, then:
+gradient ≈ 0.9^80 ≈ 10^-4  (vanishingly small)</code></pre>
+
+<p>Layers near the input can't learn — gradients are too weak.</p>
+
+<h4>With Residuals</h4>
+
+<pre><code>x_0 ──────────────┐
+                  ├──→ x_1 ──────────────┐
+              f_1(x_0)                   ├──→ … ──→ x_80
+                                      f_2(x_1)
+
+Backward pass (gradients):
+∂loss/∂x_0 = ∂loss/∂x_1 + ∂loss/∂x_2 + … + ∂loss/∂x_80
+           └─────── direct path ───────┘
+
+The direct x_0 → x_80 path is always strength 1 (the + operation).
+Gradients add: even if intermediate chains are weak, the main highway is strong.
+Gradient ≈ 80 · (small signal) = stronger signal</code></pre>
+
+<p>This is called the <b>identity shortcut</b>. Crucially, gradients don't have to flow through all 80 blocks sequentially — they have a direct path to layer 1.</p>
+
+<h3>Parameter Breakdown</h3>
+
+<p>For GPT-2 small:</p>
+
+<pre><code>Total: ≈ 124M parameters
+
+Embedding table E:           38M  (30%)
+Positional table P:           0.8M ( 1%)
+N = 12 blocks:              82M  (66%)
+  - Each block:
+    - Attention: 4·d² params = 2.4M
+    - MLP:       8·d² params = 4.8M  ← this is why MLP dominates
+LM head:                     38M  (30%)</code></pre>
+
+<p>Note: embedding and LM head are often the <b>same</b> matrix (weight tying).</p>
+
+<p><b>Key insight:</b> MLP is 45% of the parameters. It's what makes the model large.</p>
+
+<h3>The Flow</h3>
+
+<pre><code>Input: token IDs  (T,)
+
+E[ids]:            (T, 768)
++ P[positions]:    (T, 768)
+= x:               (T, 768)
+
+Block 1:
+  x = x + Attn(LN(x))
+  x = x + MLP(LN(x))    → (T, 768)
+
+Block 2:
+  x = x + Attn(LN(x))
+  x = x + MLP(LN(x))    → (T, 768)
+
+…
+
+Block 12:
+  x = x + Attn(LN(x))
+  x = x + MLP(LN(x))    → (T, 768)
+
+LN(x):             (T, 768)
+× W_head^T:        (T, vocab)
+
+Logits:            (T, 50257)  ← one score per vocabulary token, per position</code></pre>
+
+<p>During training: all T rows are used (one prediction per position).<br/>
+During inference: only the last row matters (predicting the next token).</p>
+
+<h3>Why This Design</h3>
+
+<ol>
+<li><b>Stability:</b> residuals keep signals alive across 80 layers</li>
+<li><b>Efficiency:</b> once you have the shape contract, blocks are interchangeable</li>
+<li><b>Modularity:</b> attention and MLP are independent; could swap one out without breaking others</li>
+<li><b>Information preservation:</b> all layers can "see" the original input via the skip connection</li>
+</ol>
+
+<p>The residual stream is the <b>single most important idea</b> in transformers. Without it, deep learning at this scale wouldn't work.</p>
+
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<footer>
+  <p>Open source learning canvas. All content generated from interactive discussions. Last updated: September 2026.</p>
+</footer>
+
+</body>
+</html>
