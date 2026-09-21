@@ -2,6 +2,17 @@
 const LOG = {
   sessions: [
     {
+      date: '2026-09-21',
+      title: 'Session 5 — LayerNorm + deep dive on Embedding/Position/Residual',
+      points: [
+        'Detailed text explanations for Part 1–3 in chat: Embedding (lookup table), Positional Encoding (learned/sinusoidal/RoPE), Residual Streams (whiteboard analogy, shape preservation, gradient flow).',
+        'Key insight: residual stream is (T × d_model) matrix—one vector per token, not one vector for whole sentence. Attention routes between positions, MLP processes each position independently.',
+        'LayerNorm scene added: normalize each token to mean=0, variance=1, apply learned γ and β. Pre-norm (before attention/MLP) is what makes deep networks trainable. Interactive widget shows input → μ/σ² → normalized → γ·x̂+β → output.',
+        'Updated block scene ln1 node to link to new layernorm child scene with full math walkthrough.',
+        'Clarified the problem LayerNorm solves: after 80 accumulations, residual stream values explode/vanish without normalization.',
+      ],
+    },
+    {
       date: '2026-09-13',
       title: 'Session 4 — guided tours + transformer block',
       points: [

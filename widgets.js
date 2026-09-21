@@ -195,6 +195,66 @@ WIDGETS.params = function (el) {
   el.querySelectorAll('input').forEach(i => i.oninput = draw); draw();
 };
 
+/* LayerNorm visualization: input distribution → normalize → apply learned scale/shift. */
+WIDGETS.layernorm = function (el) {
+  const d = 8;  // dimension
+  let seed = 42; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  let vec = Array.from({ length: d }, () => (rnd() - 0.5) * 100);  // messy: -50 to +50
+  let gamma = Array(d).fill(1), beta = Array(d).fill(0);
+
+  el.innerHTML = `<h3>Normalize one token's vector</h3>
+    <p class="hint">Input: messy values from residual stream (after accumulation). Watch the normalization shift them to mean≈0, var≈1, then apply learned scale γ and shift β.</p>
+    <label><input class="resample" type="button" value="new vector"></label>
+    <div class="hm-title">step 1: input (raw residual stream values)</div>
+    <div class="ln-in"></div>
+    <div class="hm-title">step 2: compute μ = mean, σ² = variance</div>
+    <div class="ln-stats"></div>
+    <div class="hm-title">step 3: normalize: (x − μ) / √(σ² + ε)</div>
+    <div class="ln-norm"></div>
+    <div class="hm-title">step 4: apply learned γ and β, or adjust them with sliders</div>
+    <div class="row" style="font-size:12px">
+      <label>γ scale: <input class="gamma" type="range" min="0.1" max="3" step="0.1" value="1" style="width:100px"></label>
+      <label>β shift: <input class="beta" type="range" min="-2" max="2" step="0.1" value="0" style="width:100px"></label>
+    </div>
+    <div class="hm-title">step 5: output: γ ⊙ x̂ + β (stable scale, ready for attention/MLP)</div>
+    <div class="ln-out"></div>`;
+
+  const q = s => el.querySelector(s);
+  const fmt = (n, decimals = 2) => n.toFixed(decimals);
+
+  function renderBar(arr, title = '') {
+    const min = Math.min(...arr), max = Math.max(...arr), range = max - min || 1;
+    return arr.map((v, i) => {
+      const norm = (v - min) / range;
+      const color = v > 0 ? `rgba(76,141,255,${Math.min(1, Math.abs(v) / 30)})` : `rgba(255,159,67,${Math.min(1, Math.abs(v) / 30)})`;
+      const width = Math.abs(v) / Math.max(30, Math.abs(min), Math.abs(max)) * 100;
+      return `<div class="bar"><span class="bt">${i}</span><div class="bf" style="justify-content:${v >= 0 ? 'flex-start' : 'flex-end'}"><div style="width:${width}%;background:${color}"></div></div><span class="bp">${fmt(v)}</span></div>`;
+    }).join('');
+  }
+
+  function draw() {
+    vec = el.querySelector('.resample') ? vec : vec;  // stay same unless clicked
+    const mu = vec.reduce((a, b) => a + b) / d;
+    const sigma2 = vec.reduce((a, x) => a + (x - mu) ** 2, 0) / d;
+    const sigma = Math.sqrt(sigma2 + 1e-6);
+    const normalized = vec.map(x => (x - mu) / sigma);
+
+    gamma = Array(d).fill(+q('.gamma').value);
+    beta = Array(d).fill(+q('.beta').value);
+    const out = normalized.map((x, i) => gamma[i] * x + beta[i]);
+
+    q('.ln-in').innerHTML = renderBar(vec);
+    q('.ln-stats').innerHTML = `<div class="bar"><span class="bt">μ</span><span class="bp">${fmt(mu)}</span></div><div class="bar"><span class="bt">σ²</span><span class="bp">${fmt(sigma2)}</span></div><div class="bar"><span class="bt">σ</span><span class="bp">${fmt(sigma)}</span></div>`;
+    q('.ln-norm').innerHTML = renderBar(normalized);
+    q('.ln-out').innerHTML = renderBar(out);
+  }
+
+  q('.resample').onclick = () => { vec = Array.from({ length: d }, () => (rnd() - 0.5) * 100); draw(); };
+  q('.gamma').oninput = draw;
+  q('.beta').oninput = draw;
+  draw();
+};
+
 /* Minimal byte-pair encoding, character-level (characters stand in for bytes). Shared by the two widgets. */
 const BPE = {
   DEFAULT_CORPUS: 'the cat sat on the mat. the cat ate the rat. low lower lowest. new newer newest. slow slower slowest. the newest cat is the slowest cat',

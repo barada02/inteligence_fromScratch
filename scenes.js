@@ -759,7 +759,7 @@ block: {
   nodes: [
     { id: 'xin',  label: 'x_in',                  x: 0,    y: 200, w: 120, h: 70,  kind: 'tensor',  sub: '(T × d_model)', status: 'done',
       notes: `The residual stream. \`T\` rows (tokens) × \`d_model\` columns. Every block receives and returns exactly this shape — that is the whole reason blocks can be stacked without thinking about it.` },
-    { id: 'ln1',  label: 'LayerNorm',             x: 190,  y: 200, w: 140, h: 70,  kind: 'weights', sub: 'γ, β · 2·d_model params', status: 'done',
+    { id: 'ln1',  label: 'LayerNorm',             x: 190,  y: 200, w: 140, h: 70,  kind: 'weights', sub: 'γ, β · 2·d_model params', status: 'done', child: 'layernorm',
       notes: `
 Applied to **each token's vector separately**, across its \`d_model\` entries:
 
@@ -773,7 +773,9 @@ y  = (x − μ) / √(σ² + ε) · γ + β
 
 **RMSNorm** (Llama and most modern models) drops the mean: \`y = x / √(mean(x²) + ε) · γ\`. Cheaper, works as well.
 
-**Why:** the residual stream grows as blocks keep adding to it. Without normalisation, block 40 would see vectors 40× larger than block 1 and its weights could never be tuned for both. Pre-norm (normalise *before* the sub-layer, as drawn) is what everyone uses now.` },
+**Why:** the residual stream grows as blocks keep adding to it. Without normalisation, block 40 would see vectors 40× larger than block 1 and its weights could never be tuned for both. Pre-norm (normalise *before* the sub-layer, as drawn) is what everyone uses now.
+
+Double-click to see the normalization process step-by-step with an interactive demo.` },
     { id: 'attn', label: 'Multi-head\nattention', x: 390,  y: 180, w: 200, h: 110, kind: 'weights', sub: '4·d_model² params', child: 'attention', status: 'done',
       notes: `
 Reads all \`T\` rows, lets every token gather information from earlier tokens, writes \`T\` rows back. The only cross-token operation in the whole model.
@@ -1244,6 +1246,165 @@ posttrain: {
     { id: 'chat', label: 'Chat model',        x: 780, y: 200, w: 190, h: 70, kind: 'weights' },
   ],
   edges: [['base', 'sft'], ['sft', 'rl'], ['rm', 'rl'], ['rl', 'chat']],
+},
+
+/* ------------------------------------------------------------------ */
+layernorm: {
+  title: 'LayerNorm',
+  widget: 'layernorm',
+  tour: [
+    { node: null, title: 'Keeping the stream stable', text: 'As blocks add to the residual stream 80 times, values can explode or vanish. LayerNorm rescales each token\'s vector to have mean 0 and variance 1, with learnable scale γ and shift β. This happens *before* attention and MLP, not after.' },
+    { node: 'xin', text: 'The residual stream for one token (one row of the (T × d_model) matrix). Could be [100, 0.001, −50, 200, …] — values all over the place after accumulation.' },
+    { node: 'mean', text: 'Compute the mean of these d_model values. μ = (100 + 0.001 − 50 + 200 + …) / 768. One number per token.' },
+    { node: 'var', text: 'Compute the variance: how spread out the values are. σ² = average of (x − μ)². If all values are huge, variance is huge.' },
+    { node: 'norm', text: '(x − μ) / √(σ² + ε). Subtract the mean (center at 0), divide by std (rescale to variance 1). Result: mean ≈ 0, std ≈ 1. The ε ≈ 10⁻⁶ avoids division by zero.' },
+    { node: 'scale', text: 'y = γ ⊙ x̂ + β. Apply learned scale γ and shift β (vectors of length d_model). This lets the model undo normalization if it wants to — at first γ = 1, β = 0 (identity), then training adjusts them.' },
+    { node: 'xout', text: 'Same shape as input, but now normalized. Feeding this stable signal into attention and MLP lets them see consistent scales no matter how deep the block is.' },
+  ],
+  nodes: [
+    { id: 'xin',  label: 'Token vector\n(messy)',    x: 0,    y: 200, w: 140, h: 70,  kind: 'tensor',  sub: 'd_model values', status: 'done',
+      notes: `One row from the residual stream. Could be \`[100, 0.001, -50, 200, ...]\` after 40 blocks of adding. Values scale is all over the place.` },
+    { id: 'mean', label: 'Compute mean μ',           x: 200,  y: 100, w: 140, h: 70,  kind: 'op',      sub: 'one number', status: 'done',
+      notes: `μ = (x₀ + x₁ + ... + x_{d-1}) / d\n\nFor example: [100, 0.001, -50, 200] → μ = 62.5` },
+    { id: 'var',  label: 'Compute variance σ²',      x: 200,  y: 300, w: 140, h: 70,  kind: 'op',      sub: 'one number', status: 'done',
+      notes: `σ² = average of (x - μ)²\n\nMeasures how spread the values are. Large variance → values are far from the mean.` },
+    { id: 'norm', label: 'Normalize',                x: 420,  y: 200, w: 140, h: 70,  kind: 'op',      sub: 'per-element', status: 'done',
+      notes: `x̂ = (x - μ) / √(σ² + ε)\n\nResult: mean(x̂) ≈ 0, var(x̂) ≈ 1\n\nε ≈ 1e-6 prevents division by zero.` },
+    { id: 'scale', label: 'Scale & shift\n(learned)',x: 640,  y: 200, w: 140, h: 70,  kind: 'weights', sub: 'γ, β (d_model)', status: 'done',
+      notes: `y = γ ⊙ x̂ + β\n\nγ (gamma): scale vector, one value per dimension\nβ (beta): shift vector, one value per dimension\n\nInitialized to γ=1, β=0 (identity). During training, adjusted to match what downstream operations need.` },
+    { id: 'xout', label: 'Output\n(normalized)',     x: 860,  y: 200, w: 140, h: 70,  kind: 'tensor',  sub: 'd_model values', status: 'done',
+      notes: `Same shape as input, but scaled to mean ≈ 0, variance ≈ 1 (plus learned γ, β). Ready to feed into attention or MLP at a stable scale.` },
+  ],
+  edges: [
+    ['xin', 'mean'], ['xin', 'var'], ['mean', 'norm'], ['var', 'norm'], ['norm', 'scale'], ['scale', 'xout'],
+  ],
+  notes: `
+# LayerNorm — Keeping Values Sane
+
+## The Problem (Simple English)
+
+Every block adds to the residual stream. After 80 additions, values can explode or shrink to nothing.
+
+If values get huge: attention scores become extreme, softmax collapses to one token.
+If values shrink: gradients vanish during backward pass.
+
+**Solution:** Normalize each token's vector to have mean 0 and variance 1 *before* feeding it to attention and MLP.
+
+## The Analogy: A Sound Mixer
+
+A DJ mixes multiple audio tracks. If they're all at different volumes, the output is a mess. Before applying an effect, the mixer automatically rescales all tracks to the same loudness level.
+
+Similarly, LayerNorm rescales the residual stream to a standard scale before each block processes it.
+
+## The Math
+
+For one token's vector \`x = [x₀, x₁, ..., x_{d-1}]\`:
+
+### Step 1: Compute mean and variance
+
+\`\`\`
+μ = (x₀ + x₁ + ... + x_{d-1}) / d       one number
+σ² = ((x₀ − μ)² + (x₁ − μ)² + ... ) / d  one number
+\`\`\`
+
+### Step 2: Normalize (z-score)
+
+\`\`\`
+x̂ = (x − μ) / √(σ² + ε)
+
+where ε ≈ 10⁻⁶ (prevents division by zero)
+
+Result: mean(x̂) ≈ 0, var(x̂) ≈ 1
+\`\`\`
+
+### Step 3: Learnable scale and shift
+
+\`\`\`
+y = γ ⊙ x̂ + β
+
+where:
+  γ (gamma): learned scale vector, shape (d_model,)
+  β (beta):  learned shift vector, shape (d_model,)
+  ⊙: element-wise multiplication
+\`\`\`
+
+**Example:**
+\`\`\`
+x = [10, 100, 2, 50]
+μ = 40.5
+σ = 38.9
+x̂ = [-0.78, 1.53, -0.99, 0.24]    (mean ≈ 0, variance ≈ 1)
+
+If γ = [1, 1, 1, 1] and β = [0, 0, 0, 0]:
+y = [-0.78, 1.53, -0.99, 0.24]
+
+If γ = [2, 1, 0.5, 1] and β = [0, 0, 0, 0]:
+y = [-1.56, 1.53, -0.495, 0.24]   (scale adjusted per dimension)
+\`\`\`
+
+## Key Insight: Pre-Norm vs. Post-Norm
+
+**Pre-norm (what transformers use now):**
+\`\`\`
+x = x + Attn(LN(x))      ← normalize *before* attention
+x = x + MLP(LN(x))       ← normalize *before* MLP
+\`\`\`
+
+**Post-norm (older, less stable):**
+\`\`\`
+x = LN(x + Attn(x))      ← normalize *after* attention
+x = LN(x + MLP(x))       ← normalize *after* MLP
+\`\`\`
+
+With pre-norm, attention and MLP always see a clean input at mean=0, variance=1. This is much more stable for training deep networks.
+
+## Why Per-Token, Not Per-Batch?
+
+We normalize each token independently (across its d_model dimensions), not across all T tokens.
+
+**Why?** Sequence length T varies (could be 10 tokens or 10,000). If we normalized per-batch, the normalization would change with sequence length, breaking the model. Per-token normalization is invariant to sequence length.
+
+## Parameter Count
+
+Each LayerNorm has **2·d_model** parameters (γ and β).
+
+With 80 blocks (2 LayerNorms per block), that's:
+\`\`\`
+80 × 2 × 768 ≈ 123K parameters
+\`\`\`
+
+Tiny compared to 124M total, but essential for training.
+
+## RMSNorm (Modern Alternative)
+
+Llama, Mistral, and newer models use **RMSNorm** instead:
+\`\`\`
+y = x / √(mean(x²) + ε) · γ
+\`\`\`
+
+Drops the mean subtraction, keeps just the RMS (root mean square). Slightly cheaper, works just as well.
+
+## Why Pre-Norm Makes Deep Networks Possible
+
+**Without LayerNorm:**
+\`\`\`
+Block 1: r₁ = r₀ + attn(r₀) + mlp(r₀)   [values: [10, 100, 2, 50]]
+Block 2: r₂ = r₁ + attn(r₁) + mlp(r₁)   [values: [500, 10000, ...] exploding]
+Block 3: ...                              [gradient vanishing]
+\`\`\`
+
+**With LayerNorm:**
+\`\`\`
+Block 1: attn/mlp see LN(r₀) = [stable, mean=0, var=1]
+Block 2: attn/mlp see LN(r₁) = [stable, mean=0, var=1]
+...
+Block 80: attn/mlp see LN(r₇₉) = [stable, mean=0, var=1]
+
+Gradients flow cleanly through all 80 layers.
+\`\`\`
+
+LayerNorm is **the** reason deep transformers are trainable.
+`
 },
 
 };
