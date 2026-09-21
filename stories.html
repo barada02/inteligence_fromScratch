@@ -16,7 +16,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 'IBM Plex Sans', sans-serif; overflow-x: hidden; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 'IBM Plex Sans', sans-serif; overflow-x: hidden; padding-top: 66px; }
 body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background:
   radial-gradient(ellipse 1200px 600px at 20% 50%, rgba(90,158,255,.08) 0%, transparent 40%),
   radial-gradient(ellipse 1000px 500px at 80% 20%, rgba(196,146,255,.06) 0%, transparent 40%);
@@ -31,8 +31,11 @@ header {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  position: relative;
-  z-index: 10;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
 }
 
 header h1 {
@@ -76,9 +79,9 @@ nav.links a.active {
 main {
   display: flex;
   gap: 32px;
-  max-width: 1400px;
+  max-width: 1450px;
   margin: 0 auto;
-  padding: 50px 24px;
+  padding: 40px 24px 60px;
   position: relative;
   z-index: 1;
 }
@@ -86,6 +89,8 @@ main {
 .stories-grid {
   display: grid;
   gap: 32px;
+  flex: 1;
+  min-width: 0;
 }
 
 .story-card {
@@ -225,17 +230,19 @@ main {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 26px;
-  margin-bottom: 44px;
+  padding: 24px;
   position: sticky;
-  top: 20px;
+  top: 70px;
+  height: fit-content;
   box-shadow: var(--shadow-sm);
   animation: slideUp .4s ease-out;
+  min-width: 240px;
+  flex-shrink: 0;
 }
 
 .toc h3 {
   margin: 0 0 18px 0;
-  font-size: 16px;
+  font-size: 15px;
   color: var(--text);
   font-family: 'Syne', sans-serif;
   font-weight: 700;
@@ -256,21 +263,22 @@ main {
   text-decoration: none;
   transition: all .2s ease;
   font-weight: 500;
+  font-size: 14px;
 }
 
 .toc a:hover {
   color: var(--text);
-  text-decoration: underline;
+  padding-left: 4px;
 }
 
 footer {
   border-top: 1px solid var(--line);
-  margin-top: 80px;
-  padding-top: 30px;
-  padding-bottom: 20px;
+  margin-top: 60px;
+  padding: 30px 24px 20px;
   text-align: center;
   color: var(--muted);
   font-size: 12px;
+  grid-column: 1 / -1;
 }
 </style>
 </head>
